@@ -4,10 +4,11 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {speechAudio,SpeechError}=require('./voice.cjs');
 const {createImageConfigStore,ImageConfigError}=require('./image-config.cjs');
+const {createAgentConfigStore,AgentConfigError,MAX_BYTES:AGENT_CONFIG_MAX_BYTES}=require('./agent-config.cjs');
 const AgentRequest=require('./agent-request.js');
 const Limits=require('./limits.js');
 const {randomUUID}=require('node:crypto');
-const {requestAgent}=require('./agent-transport.cjs');
+const {requestAgent,requestAgentWithRetry}=require('./agent-transport.cjs');
 const {createAgentLogger,safeEntry}=require('./agent-log.cjs');
 const base=__dirname;
 const allowed=new Set(['index.html','styles.css','limits.js','app.js','engine.js','voices.js','observer.js','spectator.js','assets/rules-6.mp3','assets/rules-12.mp3','image-settings.html','image-settings.css','image-settings.js','manor.js','manor.css','manor-twelve.css','theme.css','soundfx.js','assets/music/manor-nocturne.wav','assets/sfx/wolf-howl-v3.wav',...require('./soundfx.js').names.map(n=>'assets/sfx/'+n+'.wav'),...['manor-room','manor-table',...Array.from({length:12},(_,i)=>'portrait-'+String(i+1).padStart(2,'0')).flatMap(id=>[id,id+'-thumb',id+'-closed'])].map(id=>'assets/manor/'+id+'.webp')]);
@@ -162,12 +163,14 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task))diagnostic.requestContext=body.messages;
     if(Buffer.byteLength(JSON.stringify(body))>options.maxRequestBytes)throw new ApiError(413,'REQUEST_TOO_LARGE','完整历史上下文超过本地服务的请求容量上限，系统未删减或概括内容，请检查容量后手动处理');
     const endpoint=normalizeEndpoint(body.endpoint);
-    if(!gameAction)timer=setTimeout(()=>{timedOut=true;controller.abort()},options.upstreamTimeoutMs);
+    const requestTimeoutMs=gameAction?0:Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs);
+    if(!gameAction)timer=setTimeout(()=>{timedOut=true;controller.abort()},requestTimeoutMs);
     const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:gameAction?body.reasoningEffort:null,max_tokens:gameAction?Limits.ACTION_OUTPUT_MAX_TOKENS:Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS,actionTask:gameAction?body.action?.task:undefined,actionRole:gameAction?body.action?.role:undefined,allowedTargets:body.action?.allowedTargets,nightOptions:body.action?.nightOptions});
     if(diagnostic&&requestBody.text)diagnostic.requestedFormat=requestBody.text.format.type;
     if(controller.signal.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});
-    const upstream=await (gameAction?options.gameFetchImpl:options.fetchImpl)(endpoint,{
+    const upstream=await (gameAction?options.gameFetchImpl:options.connectionFetchImpl)(endpoint,{
       method:'POST',redirect:'error',signal:controller.signal,
+      ...(gameAction?{}:{timeoutMs:requestTimeoutMs,retries:options.connectionRetries,retryDelayMs:options.connectionRetryDelayMs}),
       headers:{'Content-Type':'application/json',...(body.apiKey?{Authorization:'Bearer '+body.apiKey.trim()}:{})},
       body:JSON.stringify(requestBody)
     });
@@ -190,7 +193,7 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     }
     log('response_received',undefined,{assistantResponse:diagnostic?.assistantResponse??result.choices[0].message.content});return result;
   }catch(error){
-    const failure=timedOut?new ApiError(504,'UPSTREAM_TIMEOUT','接口等待超过 180 秒，请稍后重试'):controller.signal.aborted?new ApiError(499,'REQUEST_CANCELLED','请求已取消'):error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
+    const failure=timedOut?new ApiError(504,'UPSTREAM_TIMEOUT',`接口等待超过 ${Math.ceil((gameAction?options.upstreamTimeoutMs:options.connectionTimeoutMs)/1000)} 秒，请稍后重试`):controller.signal.aborted?new ApiError(499,'REQUEST_CANCELLED','请求已取消'):error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
     httpStatus??=failure.status;
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task)&&!diagnostic.assistantResponse)diagnostic.assistantResponse=assistantOutputText(responseData);
     log(controller.signal.aborted&&!timedOut?'cancelled':'failed',failure.code,{errorMessage:failure.message,assistantResponse:diagnostic?.assistantResponse});
@@ -334,7 +337,27 @@ async function handleImageConfig(req,res,store){
     sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message}});
   }
 }
-function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true}={}){
+async function handleAgentConfig(req,res,store){
+  try{
+    const sameOrigin=`http://${req.headers.host}`;
+    if(req.headers['sec-fetch-site']==='cross-site'||req.headers.origin&&req.headers.origin!==sameOrigin||req.method==='POST'&&req.headers.origin!==sameOrigin)throw new ApiError(403,'INVALID_ORIGIN','请从游戏本机启动地址打开 Agent 配置。');
+    if(req.method==='GET'){
+      const loaded=await store.load();
+      return sendJSON(res,200,loaded?{configured:true,...loaded,storage:'Windows 当前用户加密保存'}:{configured:false,profiles:null,savedAt:null,storage:'Windows 当前用户加密保存'});
+    }
+    if(req.method!=='POST'){res.setHeader('Allow','GET, POST');throw new ApiError(405,'METHOD_NOT_ALLOWED','此接口仅支持读取和保存 Agent 配置。')}
+    if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||''))throw new ApiError(415,'INVALID_CONTENT_TYPE','请使用游戏页面保存 Agent 配置。');
+    if(Number(req.headers['content-length'])>AGENT_CONFIG_MAX_BYTES+16384)throw new ApiError(413,'REQUEST_TOO_LARGE','Agent 配置内容过大，请缩小自定义头像后重试。');
+    const body=await readJSON(req,AGENT_CONFIG_MAX_BYTES+16384);
+    if(!body||Array.isArray(body)||!Array.isArray(body.profiles))throw new ApiError(400,'INVALID_AGENT_CONFIG','Agent 配置格式不正确。');
+    return sendJSON(res,200,{configured:true,...await store.save(body.profiles,{clientSavedAt:body.clientSavedAt}),storage:'Windows 当前用户加密保存'});
+  }catch(error){
+    const failure=error instanceof ApiError||error instanceof AgentConfigError?error:new ApiError(500,'AGENT_CONFIG_ERROR','本机 Agent 配置暂不可用，请稍后重试。');
+    sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message}});
+  }
+}
+function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
+  const instanceVersion=randomUUID();
   const speechOptions={fetchImpl,speechTimeoutMs,synthesizeImpl,state:{active:0}};
   const stories=require('./story-api.cjs').createStoryAPI({fetchImpl,store:storyStore,config:videoConfigStore,jobs:videoJobs,artJobs,imageConfig:imageConfigStore,readJSON,sendJSON,validateChat,normalizeEndpoint,readUpstream,upstreamError});
   const recordings=require('./recording-api.cjs').createRecordingAPI({sendJSON,readJSON,...recordingOptions});
@@ -345,16 +368,17 @@ function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,agentLogger=cr
     if(/^api\/(scenarios|scenario-reviews|video-config|video-jobs|story-media|story-art-jobs|story-art-media|story-assets|story-art-import|story-key-assets|story-preview-jobs|story-preview-media|story-title-jobs|story-title-media|story-subtitles|story-subtitle-media|story-productions)(?:\/|$)/.test(name)){void stories.handle(req,res,name);return}
     if(/^api\/recordings(?:\/|$)/.test(name)){void recordings.handle(req,res,name);return}
     if(name==='api/image-config'){void handleImageConfig(req,res,imageConfigStore);return}
+    if(name==='api/agent-config'){void handleAgentConfig(req,res,agentConfigStore);return}
     if(name==='api/agent-events'){void handleAgentEvent(req,res,agentLogger);return;}
     const gameLogMatch=/^api\/game-logs\/([a-zA-Z0-9_-]{1,80})$/.exec(name);
     if(gameLogMatch){void handleGameLog(req,res,agentGameLogDirectory,gameLogMatch[1]);return;}
     if(name==='api/chat/batch'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}})}
-      void handleChatBatch(req,res,{fetchImpl,gameFetchImpl,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
+      void handleChatBatch(req,res,{fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
     }
     if(name==='api/chat'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}});}
-      void handleChat(req,res,{fetchImpl,gameFetchImpl,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
+      void handleChat(req,res,{fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
     }
     if(name==='api/speech'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}})}
@@ -382,6 +406,3 @@ if(require.main===module){
   createServer().listen(port,'127.0.0.1',()=>console.log(`夜幕之下已就绪：http://127.0.0.1:${port}`));
 }
 module.exports={createServer,normalizeEndpoint};
-
-
-

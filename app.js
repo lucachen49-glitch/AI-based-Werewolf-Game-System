@@ -9,16 +9,23 @@ const PERSONALITIES=['沉着、有主见，愿意为自己的判断承担风险�
 const BOARDS={6:{title:'经典 6 人局',roles:['狼人 × 2','预言家 × 1','女巫 × 1','平民 × 2'],note:'2 狼 · 2 神 · 2 民，轻量入门。'},12:{title:'守卫猎人 12 人局',roles:['狼人 × 4','预言家 × 1','女巫 × 1','猎人 × 1','守卫 × 1','平民 × 4'],note:'4 狼 · 4 神 · 4 民，无警长标准局。'}};
 const Voices=NightfallVoices;
 const Manor=NightfallManor,failedPortraits=new Set();
+const PROFILE_STORAGE_KEY='nightfall-profiles-v1',PROFILE_SAVED_AT_KEY='nightfall-profiles-saved-at-v1';
 function newGameId(){const id=globalThis.crypto?.randomUUID?.();return id||`game-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,10)}`;}
-function loadProfiles(){
-  let saved={};try{const value=JSON.parse(localStorage.getItem('nightfall-profiles-v1')||'{}');if(value&&typeof value==='object')saved=value}catch{}
+function readLocalProfileRecord(){
+  let profiles=null;try{const value=JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY)||'null');if(Array.isArray(value)||(value&&typeof value==='object'))profiles=value}catch{}
+  let savedAt=localStorage.getItem(PROFILE_SAVED_AT_KEY)||null;if(savedAt&&!Number.isFinite(Date.parse(savedAt)))savedAt=null;
+  return {profiles,savedAt};
+}
+function buildProfiles(saved){
+  const source=Array.isArray(saved)||(saved&&typeof saved==='object')?saved:{};
   return Array.from({length:12},(_,i)=>{
-    const stored=saved[i]&&typeof saved[i]==='object'?saved[i]:{};
+    const stored=source[i]&&typeof source[i]==='object'?source[i]:{};
     const rememberKey=stored.rememberKey!==false;
     const reasoningEffort=NightfallAgentRequest.normalizeReasoningEffort(stored.reasoningEffort);
     return {name:NAMES[i],avatar:AVATARS[i],control:'local',endpoint:'',model:'',reasoningEffort,personality:PERSONALITIES[i%6],...Voices.settings(stored,i),voiceMatch:Manor.voiceMatchMode(stored,i,Voices.defaults(i)),manorPortrait:Manor.normalize(stored.manorPortrait,i),rememberKey,key:rememberKey&&typeof stored.key==='string'?stored.key:'',voiceKey:stored.rememberVoiceKey!==false&&typeof stored.voiceKey==='string'?stored.voiceKey:'',connection:'untested',connectionError:''};
   });
 }
+function loadProfiles(){return buildProfiles(readLocalProfileRecord().profiles)}
 let apiWaiting=null,apiWake=null,agentPending=null,agentRequestSequence=0,watchRecordBefore=null,preparedSpeech=null,voteBatch=null;
 const decisionConfigs=new WeakMap(),decisionAttempts=new WeakMap();
 let profiles=loadProfiles();
@@ -273,9 +280,45 @@ function toast(text){$('toast').textContent=text;$('toast').classList.add('show'
 function addFeed(icon,text,type='',publicText=text){feed.push({icon,text,publicText,type,time:stamp()});renderFeed();syncRecordScroll()}
 function addSpeech(id,text){text=limitSpeech(text);transcript.push({id,text,time:stamp(),round:game.round,pk:!!game.pk});renderTranscript();renderSpectator();renderPlayers()}
 function syncLogs(night){game.logs.slice(logCursor).forEach(l=>{addFeed(l.phase==='night'?'☾':'✦',l.text,'notice');const e=NightfallObserver.commentary(l,/^天亮了/.test(l.text)?night:null);if(e)addObserver(e)});logCursor=game.logs.length}
-function persist(){const data=profiles.map(({key,voiceKey,connection,connectionError,...p})=>({...p,...(p.rememberKey?{key}:{}),...(p.rememberVoiceKey?{voiceKey}:{})}));try{localStorage.setItem('nightfall-profiles-v1',JSON.stringify(data));return true}catch{toast('本地存储空间不足，请缩小头像图片后重试');return false}}
-function renderGameLogId(){const el=$('gameLogId');if(el)el.textContent=`本局编号：${gameId}`;}
-function renderAll(){renderGameLogId();renderSidebar();renderStatus();renderPlayers();renderAction();renderFeed();renderTranscript();renderAgents();renderRules();renderSpectator();$('profileBtn').innerHTML=`<span class="mini-avatar">${avatarHTML(profiles[0])}</span><span>${esc(name(0))}</span><span class="chevron">⌄</span>`;}
+let agentPersistenceRevision=0,agentConfigSyncChain=Promise.resolve();
+function agentConfigServiceAvailable(){return typeof location!=='undefined'&&location.protocol==='http:'&&location.origin&&location.origin!=='null'}
+function serializedProfilesFor(value){return value.map(({key,voiceKey,connection,connectionError,...p})=>({...p,...(p.rememberKey?{key}:{}),...(p.rememberVoiceKey?{voiceKey}:{})}))}
+function serializedProfiles(){return serializedProfilesFor(profiles)}
+function writeLocalProfiles(data,savedAt){localStorage.setItem(PROFILE_STORAGE_KEY,JSON.stringify(data));if(savedAt)localStorage.setItem(PROFILE_SAVED_AT_KEY,savedAt)}
+function queueAgentConfigSync(data,clientSavedAt){
+  if(!agentConfigServiceAvailable())return;
+  agentConfigSyncChain=agentConfigSyncChain.then(async()=>{
+    try{
+      const response=await fetch('/api/agent-config',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({profiles:data,clientSavedAt})});
+      const body=await response.json().catch(()=>({}));
+      if(!response.ok){toast(body.error?.message||'本机 Agent 配置保存失败，浏览器中的配置仍可使用');return}
+
+    }catch{toast('本机 Agent 配置保存失败，浏览器中的配置仍可使用')}
+  });
+}
+function persist(sync=false){
+  const data=serializedProfiles(),savedAt=new Date().toISOString();
+  try{writeLocalProfiles(data,savedAt);agentPersistenceRevision++;if(sync)queueAgentConfigSync(data,savedAt);return true}catch{toast('本地存储空间不足，请缩小头像图片后重试');return false}
+}
+async function restoreAgentProfiles(){
+  if(!agentConfigServiceAvailable())return;
+  const revision=agentPersistenceRevision,local=readLocalProfileRecord();
+  try{
+    const response=await fetch('/api/agent-config',{cache:'no-store'});
+    const remote=await response.json().catch(()=>({}));
+    if(!response.ok)throw Error(remote.error?.message||'本机 Agent 配置暂不可用');
+    if(remote.configured&&Array.isArray(remote.profiles)){
+      const localTime=local.savedAt?Date.parse(local.savedAt):NaN,remoteTime=remote.savedAt?Date.parse(remote.savedAt):NaN;
+      if(local.profiles&&Number.isFinite(localTime)&&Number.isFinite(remoteTime)&&localTime>remoteTime){
+        queueAgentConfigSync(serializedProfilesFor(buildProfiles(local.profiles)),local.savedAt);return;
+      }
+      if(revision!==agentPersistenceRevision)return;
+      profiles=buildProfiles(remote.profiles);writeLocalProfiles(serializedProfiles(),remote.savedAt||new Date().toISOString());renderAll();return;
+    }
+    if(local.profiles)queueAgentConfigSync(serializedProfilesFor(buildProfiles(local.profiles)),local.savedAt||new Date().toISOString());
+  }catch{}
+}
+function renderAll(){renderSidebar();renderStatus();renderPlayers();renderAction();renderFeed();renderTranscript();renderAgents();renderRules();renderSpectator();$('profileBtn').innerHTML=`<span class="mini-avatar">${avatarHTML(profiles[0])}</span><span>${esc(name(0))}</span><span class="chevron">⌄</span>`;}
 function renderSidebar(){const c=BOARDS[size];$('boardTitle').textContent=c.title;$('boardNote').textContent=c.note;$('rolePills').innerHTML=c.roles.map(x=>`<span class="role-pill ${x.includes('狼人')?'wolf':''}">${x}</span>`).join('');document.querySelectorAll('.room-option').forEach(b=>{b.classList.toggle('active',+b.dataset.room===size);b.setAttribute('aria-selected',String(+b.dataset.room===size))})}
 function renderStatus(){
   const remote=profiles.slice(0,size).filter(p=>p.control==='api').length;
@@ -1067,7 +1110,7 @@ function saveAgent(){
   else if(connectionSignature(previous)===connectionSignature(p)){p.connection=previous.connection;p.connectionError=previous.connectionError}
   if(p.control==='api'&&(!p.endpoint||!p.model)){toast('请填写接口地址与模型名称');return}
   profiles[selectedAgent]=p;
-  if(!persist()){profiles[selectedAgent]=previous;return}
+  if(!persist(true)){profiles[selectedAgent]=previous;return}
   invalidateVoteAgent(selectedAgent);
   const preparationChanged=preparedSpeech?.id===selectedAgent&&speechConfigSignature(p)!==preparedSpeech.signature;
   if(preparationChanged){preparedSpeech.invalidated=true;preparedSpeech.status='failed'}
@@ -1156,7 +1199,7 @@ $('modalClose').addEventListener('click',closeModal);$('modalBackdrop').addEvent
 document.addEventListener('keydown',e=>{if($('modalBackdrop').classList.contains('hidden'))return;if(e.key==='Escape')closeModal();if(e.key==='Tab'){const items=[...document.querySelectorAll('.modal button,.modal input,.modal select,.modal textarea')].filter(x=>!x.disabled);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
 $('avatarPicker').addEventListener('click',e=>{const a=e.target.closest('[data-avatar]')?.dataset.avatar;if(a){draftAvatar=a;renderAvatarPicker()}});
 $('avatarUpload').addEventListener('change',e=>{const file=e.target.files[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>1024*1024){toast('请选择不大于 1MB 的 PNG、JPG 或 WebP 图片');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{draftAvatar=reader.result;renderAvatarPicker()};reader.readAsDataURL(file)});
-$('saveAgent').addEventListener('click',saveAgent);$('testConnection').addEventListener('click',()=>testConnection());$('testAllBtn').addEventListener('click',testAll);$('saveAllAgents').addEventListener('click',()=>{if(persist())toast('全部配置已保存；勾选记住的密钥将在此浏览器自动恢复')});$('showKey').addEventListener('click',()=>{const hidden=$('keyInput').type==='password';$('keyInput').type=hidden?'text':'password';$('showKey').textContent=hidden?'隐藏':'显示'});
+$('saveAgent').addEventListener('click',saveAgent);$('testConnection').addEventListener('click',()=>testConnection());$('testAllBtn').addEventListener('click',testAll);$('saveAllAgents').addEventListener('click',()=>{if(persist(true))toast('全部配置已保存；勾选记住的密钥将在本机游戏服务加密保存')});$('showKey').addEventListener('click',()=>{const hidden=$('keyInput').type==='password';$('keyInput').type=hidden?'text':'password';$('showKey').textContent=hidden?'隐藏':'显示'});
 $('copyRoomBtn').innerHTML='↗ 导出对局记录';$('copyRoomBtn').addEventListener('click',()=>{const data=spectatorExport();const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.href=url;a.download='夜幕之下-对局记录.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('对局记录已导出，不包含密钥')});
 $('downloadGameLogBtn')?.addEventListener('click',async()=>{try{const url=`/api/game-logs/${encodeURIComponent(gameId)}`;const response=await fetch(url,{method:'HEAD',cache:'no-store'});if(!response.ok){toast(response.status===404?'本局还没有 Agent 请求日志。':'本局日志暂时不可下载，请稍后重试。');return;}const link=document.createElement('a');link.href=url;link.download=`夜幕之下-${gameId}-Agent日志.jsonl`;link.click();}catch{toast('本局日志暂时不可下载，请稍后重试。')}});
 $('musicBtn').addEventListener('click',toggleMusic);$('musicVolume').addEventListener('input',()=>{music?.setVolume(Number($('musicVolume').value)/100);renderMusicControls()});
@@ -1172,5 +1215,4 @@ if(typeof initPortrait==='function')initPortrait();
 reset();
 if(typeof initStory==='function')initStory();
 if(typeof initRecording==='function')initRecording();
-
-
+void restoreAgentProfiles();

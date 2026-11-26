@@ -46,7 +46,7 @@ function renderReferencePreviews(){
     const previous=new Map(Array.from(box.querySelectorAll('[data-reference-item]'),el=>[Number(el.dataset.referenceItem),{order:Number(el.querySelector('[data-reference-order]').value),purpose:el.querySelector('[data-reference-purpose]').value}]));
     const scene=renderedDraft?.scenes?.[i]||{}, selected=Array.from(select?.selectedOptions||[],option=>Number(option.value));
     const ordered=selected.map(n=>({n,...(previous.get(n)||{order:(scene.referenceFrames||[]).indexOf(n)+1||selected.indexOf(n)+1,purpose:scene.referencePurposes?.[n]||'general'})}));
-    box.innerHTML=ordered.map(({n,order,purpose})=>{const image=art?.frames?.[n]?.url;return `<div data-reference-item="${n}">${image?`<a href="${esc(image)}" target="_blank" rel="noopener"><img src="${esc(image)}" alt="镜头 ${n+1} 参考图" style="max-width:100px;max-height:65px;object-fit:contain"></a>`:`<span>镜头 ${n+1} 的参考图尚未完成</span>`}<label>顺序 <input type="number" min="1" max="14" data-reference-order value="${order}"></label><label>用途 <select data-reference-purpose>${[['general','综合'],['scene','场景'],['costume','服装'],['prop','道具']].map(([value,label])=>`<option value="${value}" ${purpose===value?'selected':''}>${label}</option>`).join('')}</select></label></div>`}).join('');
+    box.innerHTML=ordered.map(({n,order,purpose})=>{const image=art?.frames?.[n]?.url;return `<div data-reference-item="${n}">${image?`<a href="${esc(image)}" target="_blank" rel="noopener"><img src="${esc(image)}" alt="镜头 ${n+1} 参考图"></a>`:`<span>镜头 ${n+1} 的参考图尚未完成</span>`}<label>顺序 <input type="number" min="1" max="14" data-reference-order value="${order}"></label><label>用途 <select data-reference-purpose>${[['general','综合'],['scene','场景'],['costume','服装'],['prop','道具']].map(([value,label])=>`<option value="${value}" ${purpose===value?'selected':''}>${label}</option>`).join('')}</select></label></div>`}).join('');
   });
 }
 function rawDraft(){const d=blank();if(typeof introRead==='function'){d.introductions=introRead();if(introSourceId)d.introSourceId=introSourceId;}if(renderedDraft?.narrativeMode)d.narrativeMode=renderedDraft.narrativeMode;if(renderedDraft?.language)d.language=renderedDraft.language;d.characters=d.characters.map((c,i)=>({...renderedDraft?.characters[i],...c}));d.scenes=Array.from({length:sceneCount},(_,i)=>({...renderedDraft?.scenes[i],description:'',narration:''}));d.visualGuide=$('visualGuide').value;for(const f of ['title','source','background'])d[f]=$(f).value;d.confirmed=$('confirmed').checked;$('characters').querySelectorAll('[data-seat][data-field]').forEach(el=>{const character=d.characters[Number(el.dataset.seat)-1];if(character)character[el.dataset.field]=el.value});$('scenes').querySelectorAll('[data-scene][data-field]').forEach(el=>{const scene=d.scenes[Number(el.dataset.scene)];if(scene)scene[el.dataset.field]=el.dataset.field==='endFrameIndex'?(el.value===''?null:Number(el.value)):el.type==='number'?Number(el.value):el.value});if(cinematic)d.scenes.forEach((s,i)=>{s.cast=Array.from(document.querySelectorAll('[data-cast="'+i+'"]:checked'),el=>Number(el.value));const references=Array.from(document.querySelectorAll('[data-reference-previews="'+i+'"] [data-reference-item]'),el=>({frame:Number(el.dataset.referenceItem),order:Number(el.querySelector('[data-reference-order]').value),purpose:el.querySelector('[data-reference-purpose]').value})).sort((a,b)=>a.order-b.order||a.frame-b.frame);s.referenceFrames=references.map(x=>x.frame);s.referencePurposes=Object.fromEntries(references.map(x=>[x.frame,x.purpose]));s.extraReferences=Array.from(document.querySelectorAll('[data-extra-reference-preview="'+i+'"] [data-extra-item]'),el=>({id:el.dataset.extraItem,purpose:el.querySelector('[data-extra-purpose]').value,order:Number(el.querySelector('[data-extra-order]').value),fixedLayout:el.querySelector('[data-extra-fixed-layout]')?.value||'',allowedMovements:el.querySelector('[data-extra-allowed-movements]')?.value||''})).sort((a,b)=>a.order-b.order).map(ref=>({id:ref.id,purpose:ref.purpose,...(ref.fixedLayout?{fixedLayout:ref.fixedLayout}:{}),...(ref.allowedMovements?{allowedMovements:ref.allowedMovements}:{})}));s.dialogues=Array.from(document.querySelectorAll('[data-dialogue-seat^="'+i+'-"]'),el=>({seat:Number(el.value),text:document.querySelector('[data-dialogue-text="'+el.dataset.dialogueSeat+'"]')?.value||'',...(d.language==='en'?{translation:document.querySelector('[data-dialogue-translation="'+el.dataset.dialogueSeat+'"]')?.value||''}:{})})).filter(x=>x.seat||x.text.trim())});return d}
@@ -201,9 +201,31 @@ $('bloodMoonSample').onclick=guard(async()=>{
 window.addEventListener('pagehide',persistWorkshop);
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistWorkshop()});
 window.addEventListener('beforeunload',e=>{persistWorkshop();if(dirty&&restoreBlocked){e.preventDefault();e.returnValue=''}});
-(async()=>{try{localStorage.removeItem('nightfall-workshop-v1')}catch{}initRehearsalUI();render(blank());initStoryReview();initArtUI();await restoreWorkshop();NightfallAutoWorkshop.mount({context:()=>({story:current,roomSize,ready:workshopReady&&!restoring&&!restoreBlocked,agent:organizerAgent()}),request:api,onStoryUpdated:async story=>{current=story;dirty=false;render(story);await library();await loadJobs();persistWorkshop();notice('已另存为 v'+story.version+'。请检查分镜引用并确认新剧本后再继续。')},save:async()=>{if(loading||restoring||restoreBlocked)throw Error('请先完成当前剧本读取或恢复');if(!current||generationDraftChanged()||!current.confirmed){const draft={...read(),confirmed:true};current=await api('/api/scenarios',draft);dirty=false;render(current);await library();await loadJobs();persistWorkshop();}}});try{const c=await api('/api/video-config');$('provider').value=c.provider;$('configStatus').textContent=c.configured?'视频密钥已加密保存。尚需检查鉴权与首镜头。':'尚未保存视频专用密钥。'}catch(e){notice(e.message,true)}})();
+async function initializeWorkshopPage(){
+  let phase='准备工坊界面';
+  try{
+    try{localStorage.removeItem('nightfall-workshop-v1')}catch{}
+    phase='初始化预演面板';initRehearsalUI();
+    phase='载入空白编辑器';render(blank());
+    phase='初始化核对面板';initStoryReview();
+    phase='初始化图片面板';initArtUI();
+    phase='恢复本地剧本';await restoreWorkshop();
+    phase='连接自动制作流程';
+    NightfallAutoWorkshop.mount({context:()=>({story:current,roomSize,ready:workshopReady&&!restoring&&!restoreBlocked,agent:organizerAgent()}),request:api,onStoryUpdated:async story=>{current=story;dirty=false;render(story);await library();await loadJobs();persistWorkshop();notice('已另存为 v'+story.version+'。请检查分镜引用并确认新剧本后再继续。')},save:async()=>{if(loading||restoring||restoreBlocked)throw Error('请先完成当前剧本读取或恢复');if(!current||generationDraftChanged()||!current.confirmed){const draft={...read(),confirmed:true};current=await api('/api/scenarios',draft);dirty=false;render(current);await library();await loadJobs();persistWorkshop();}}});
+    try{const c=await api('/api/video-config');$('provider').value=c.provider;$('configStatus').textContent=c.configured?'视频密钥已加密保存。尚需检查鉴权与首镜头。':'尚未保存视频专用密钥。'}catch(e){notice(e.message,true)}
+  }catch(e){
+    workshopReady=true;restorePending=restorePending||null;
+    const detail=e?.message||String(e);
+    try{restorePanel('工坊初始化未完成：'+detail+'。可以刷新页面重试；已读取的本地剧本和素材不会被删除。',false,!!restorePending)}catch{}
+    notice(phase+'失败：'+detail+'。可以刷新页面重试。',true);
+  }finally{
+    restoring=false;workshopReady=true;
+    try{updateButtons()}catch{}
+  }
+}
+void initializeWorkshopPage();
 
-if(typeof initCharacterIntros==='function')initCharacterIntros();
+try{if(typeof initCharacterIntros==='function')initCharacterIntros()}catch(e){notice('人物介绍面板初始化失败：'+(e?.message||String(e))+'。其他剧本功能仍可使用。',true)}
 
 document.addEventListener('change',e=>{if(e.target.matches('[data-reference-frame]'))renderReferencePreviews()});
 

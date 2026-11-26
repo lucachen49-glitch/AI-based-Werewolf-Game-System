@@ -76,14 +76,12 @@
               <button class="secondary-btn" id="portraitBtn" aria-pressed="false">▯ 竖屏录制</button>
               <button class="secondary-btn portrait-only" id="portraitResetBtn">↺ 重置对局</button>
               <button class="secondary-btn" id="copyRoomBtn">⌘ 复制房间号</button>
-              <button class="secondary-btn" id="downloadGameLogBtn">⇩ 下载本局 Agent 日志</button>
-              <span id="gameLogId" class="game-log-id" aria-live="polite"></span>
               <button class="secondary-btn pause-btn" id="pauseBtn" disabled aria-pressed="false">Ⅱ 暂停</button>
               <label class="recording-toggle"><input type="checkbox" id="autoRecord"> 自动录屏</label><span id="recordingSupport" class="recording-support"></span><button class="primary-btn" id="startBtn"><span class="play-icon">▶</span><span id="startText">开始游戏</span></button>
             </div>
           </div>
 
-          <div class="recording-links"><details class="recording-panel"><summary id="recordingStatus" role="status">录屏准备就绪 · 查看本地录像</summary><div id="recordingList"></div></details><a id="latestRecordingPlayback" class="latest-recording-playback" target="_blank" rel="noopener" hidden>▶ 打开最新回放</a></div>
+          <div class="recording-links"><details class="recording-panel"><summary id="recordingStatus" role="status">录屏准备就绪 · 查看本地录像</summary><div id="recordingList"></div><div class="recording-item recording-agent-log"><span>本局 Agent 日志</span><button type="button" id="downloadGameLogBtn">下载</button></div></details><a id="latestRecordingPlayback" class="latest-recording-playback" target="_blank" rel="noopener" hidden>▶ 打开最新回放</a></div>
           <div class="story-bar" id="storyBar"><span class="story-label" id="storyRoomLabel">6 人序幕</span><label>剧本<select id="storyChoice" aria-label="6 人剧本"><option value="">标准狼人杀</option></select></label><button id="storyRefresh" title="刷新本机剧本">↻ 刷新</button><p id="storyHint">标准玩法，不播放剧情开场。</p><a href="/scenario-settings.html" target="_blank" rel="noopener">打开剧本工坊 ↗</a></div>
           <div class="status-strip">
             <div class="phase-card night" id="phaseCard"><span class="phase-icon">☾</span><div><span class="label">当前阶段</span><strong id="phaseName">夜晚 · 狼人行动</strong></div></div>
@@ -138,7 +136,7 @@
         </div>
 
         <div class="content hidden" id="agentsView">
-          <div class="page-heading compact-heading"><div><div class="kicker">PLAYER LAB · 可替换人格</div><h1>为每个席位，<em>装上一个灵魂。</em></h1><p>每个席位独立绑定模型、人格和形象，角色由系统开局随机分配；可在此浏览器记住密钥，重启后自动恢复。</p></div><button class="primary-btn" id="saveAllAgents">保存全部配置</button></div>
+          <div class="page-heading compact-heading"><div><div class="kicker">PLAYER LAB · 可替换人格</div><h1>为每个席位，<em>装上一个灵魂。</em></h1><p>每个席位独立绑定模型、人格和形象，角色由系统开局随机分配；可将勾选记住的密钥加密保存在本机游戏服务中，清理浏览器缓存后也能恢复。</p></div><button class="primary-btn" id="saveAllAgents">保存全部配置</button></div>
           <div class="agent-toolbar panel"><div><b id="agentCount">6 个席位</b><span> · API 配置 <strong id="configuredCount">0</strong> 个 · 其余使用本地模拟</span></div><button class="secondary-btn" id="testAllBtn">▷ 批量测试连接</button></div>
           <div class="agent-grid" id="agentGrid"></div>
         </div>
@@ -173,4 +171,3 @@
     <script src="api-wait.js"></script><script src="portrait.js"></script><script src="recording-surface.js"></script><script src="recording.js"></script><script src="app.js"></script>
   </body>
 </html>
-
