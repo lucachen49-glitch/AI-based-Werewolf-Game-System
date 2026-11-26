@@ -1,0 +1,50 @@
+.fullscreen-caption{display:none}.api-wait-actions{display:flex;gap:8px;flex-wrap:wrap}
+.watch-mode.manor-mode .app-shell{width:100%;max-width:none;height:100dvh;min-height:0;overflow:hidden}
+.watch-mode .sidebar,.watch-mode .page-heading>div:first-child,.watch-mode .status-strip,.watch-mode .story-bar,.watch-mode .table-legend,.watch-mode .table-scroll-hint,.watch-mode .voice-status,.watch-mode .auto-stages{display:none!important}
+.watch-mode .workspace{padding:8px!important;min-height:0;width:100%;height:100dvh;overflow:hidden}
+.watch-mode #tableView{display:flex!important;flex-direction:column;height:100%;min-height:0;gap:5px}
+.watch-mode .page-heading{margin:0;min-height:0;padding:0;justify-content:flex-end;flex-shrink:0}
+.watch-mode .heading-actions{display:flex;flex-wrap:wrap;gap:5px}
+.watch-mode .heading-actions button{padding:7px 11px;min-height:32px}
+.watch-mode .spectator-toolbar{margin:0;padding:3px 7px;min-height:30px;flex-shrink:0;gap:6px;flex-wrap:wrap}
+.watch-mode .action-panel{flex:none;min-height:0;margin:0;padding:5px 12px}
+.watch-mode .action-panel:not(:has(.api-wait-actions)){display:none}
+.watch-mode .auto-summary h3{font-size:14px;margin:2px 0}.watch-mode .auto-summary p{font-size:12px;margin:0}
+.watch-mode.manor-mode .game-layout{position:relative;display:block!important;flex:1;min-height:0;height:0;margin:0}
+.watch-mode .table-panel{display:flex!important;flex-direction:column;height:100%;min-height:0;padding:0;overflow:hidden}
+.watch-mode .table-panel>.panel-head{padding:4px 10px;min-height:32px;flex-shrink:0;flex-wrap:wrap;gap:4px}
+.watch-mode .table-panel>.panel-head h2{font-size:13px}.watch-mode .table-panel>.panel-head .panel-kicker{display:none}
+.watch-mode .table-tools{flex-wrap:wrap;gap:4px}
+.watch-mode .fullscreen-caption{display:block;flex:none;max-height:50px;overflow:auto;text-align:center;font-size:12px;line-height:1.5;color:#f2dbb3;padding:3px 12px;background:#20140eda}
+.watch-mode .table-stage{flex:1!important;min-height:0!important;height:0!important;overflow:hidden;padding:0!important}
+.watch-mode .table-viewport{width:100%;height:100%;overflow:auto!important;display:block!important;padding:0!important}
+.watch-mode.manor-mode .table-panel .table-scene:is(.manor-six,.manor-twelve){width:100%!important;height:100%!important;min-height:360px;aspect-ratio:auto!important;min-width:700px;max-width:none!important;margin:0!important;border-radius:0}
+.watch-mode.manor-mode .table-panel .table-scene.manor-twelve{min-width:960px}
+.watch-mode .table-scene.manor-six .player{height:47%;width:26%;top:var(--seat-y)}
+.watch-mode .table-scene.manor-six .rear-seat .manor-nameplate{bottom:0}
+.watch-mode .table-scene.manor-twelve .player{height:44%;width:15.5%;left:calc(var(--seat-x) - 7.75%)}
+.watch-mode .table-scene .manor-portrait{object-fit:contain}
+.watch-mode .table-scene.manor-twelve .manor-nameplate{min-width:135px;width:96%;max-width:200px}
+.watch-mode .table-scene .manor-nameplate{min-height:70px;padding:6px 8px 4px}
+.watch-mode .table-scene .plate-details{margin-top:1px}
+.watch-mode .table-scene .player .player-name{font-size:13px}
+.watch-mode .observer-rail,.watch-mode .spectator-rail{position:absolute!important;z-index:80!important;top:0;bottom:0;width:min(300px,43vw);height:100%;background:#211914f5;box-shadow:0 5px 30px #0008;overflow:hidden}
+.watch-mode .observer-rail{left:0}.watch-mode .spectator-rail{right:0}
+.watch-mode.rail-collapsed .observer-rail,.watch-mode.rail-collapsed .spectator-rail{display:none!important}
+@media(max-width:700px){.watch-mode .heading-actions button{font-size:11px;padding:5px 7px}.watch-mode .spectator-toolbar{font-size:11px}.watch-mode .table-panel>.panel-head{font-size:11px}.watch-mode .observer-rail,.watch-mode .spectator-rail{width:46vw}.watch-mode .fullscreen-caption{font-size:11px;max-height:42px}.watch-mode .mobile-record-toggle{bottom:8px}}
+
+.watch-mode .workspace{display:flex;flex-direction:column;min-width:0;max-width:none;padding:0!important}
+.watch-mode .topbar,.watch-mode .bottom-grid{display:none!important}
+.watch-mode #tableView{width:100%;max-width:none!important;padding:6px!important;margin:0!important;box-sizing:border-box}
+.watch-mode .table-stage{width:100%!important;max-width:none!important;min-width:0!important;margin:0!important}
+.watch-mode.manor-mode .table-panel .table-viewport{width:100%!important;max-width:none!important;margin:0!important;min-width:0!important}
+.watch-mode .table-scene.manor-six .player{left:calc(var(--seat-x) - 13%)}
+.watch-mode .spectator-rail{top:0!important;display:flex;flex-direction:column}
+.watch-mode .spectator-rail .records-viewport{flex:1;height:0;min-height:0}
+.watch-mode .observer-panel{min-height:0;overflow:hidden}
+.watch-mode .observer-viewport{min-height:0;flex:1}
+.watch-mode.manor-mode #tableView{height:100%;flex:1;display:flex;min-height:0}
+.watch-mode.manor-mode .table-panel{height:100%;display:flex}
+.watch-mode.manor-mode .spectator-rail{height:100%;max-height:none}
+@media(max-width:700px){.watch-mode.manor-mode .page-heading,.watch-mode.manor-mode .spectator-toolbar{margin-bottom:0}.watch-mode.manor-mode .table-panel>.panel-head{padding:4px 8px}.watch-mode.manor-mode .table-tools{max-width:none}.watch-mode.manor-mode .spectator-toolbar #perspectiveLabel{display:none}}
+@media(max-width:700px){.watch-mode.manor-mode .table-panel .table-scene.manor-twelve{min-width:1050px}}

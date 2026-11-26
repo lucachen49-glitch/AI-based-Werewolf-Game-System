@@ -1,0 +1,19 @@
+{
+  "voice": "zh-CN-XiaoxiaoNeural",
+  "rate": "-5%",
+  "pitch": "+0Hz",
+  "rooms": {
+    "6": {
+      "file": "rules-6.mp3",
+      "textSha256": "0f6ff9e3c976aaa33875d2cb51d8f17383aec1fb8e95ff8fe0f347fbc977ee5d",
+      "audioSha256": "a53f48d17ee1e2cb8feb2bbbaa2810b1bcb101d1c4e179fad4ffd2670f4b7719",
+      "bytes": 845856
+    },
+    "12": {
+      "file": "rules-12.mp3",
+      "textSha256": "1911e04ff01385985d26e9367281bcb60b56e0afc0f765f72eb1853c85879552",
+      "audioSha256": "13a54021470b266f661235ab4cfe87aeb9397879f84f1adff8a92345ec3b3617",
+      "bytes": 1065168
+    }
+  }
+}

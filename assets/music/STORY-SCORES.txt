@@ -1,0 +1,14 @@
+Story scores / original project audio
+
+snow-arrival.wav: cold exterior, snow and arrival
+candle-intrigue.wav: candlelit interiors and conversation
+bloodmoon-night.wav: nighttime and public story crises
+verdict-pulse.wav: public voting and skill resolution
+dawn-accord.wav: ending and resolution
+
+Composed and synthesized locally by scripts/generate-story-music.py.
+32-second seamless loops, 22050 Hz, 16-bit mono PCM.
+Shared D-minor harmony permits gentle transitions; no borrowed recordings,
+samples, external music services or runtime generation. May be distributed
+with this project. Existing manor-nocturne.wav and accepted sound effects
+remain intact.

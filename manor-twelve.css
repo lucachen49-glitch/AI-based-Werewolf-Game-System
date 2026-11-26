@@ -1,0 +1,28 @@
+/* A wide, two-arc twelve-seat room with a face lane above each nameplate. */
+.table-panel .table-scene.manor-twelve,.watch-mode.manor-mode .table-panel .table-scene.manor-twelve{aspect-ratio:2.35;min-width:1140px;width:100%}
+.table-scene.manor-twelve .player,.watch-mode .table-scene.manor-twelve .player{left:calc(var(--seat-x) - 7.4%);top:var(--seat-y);width:14.8%;height:43%;min-width:0}
+.manor-twelve .manor-room-art{filter:brightness(.7)}
+.manor-twelve .manor-table-art{left:3%;top:27%;width:94%;height:64%}
+.manor-twelve .manor-nameplate{width:94%;min-width:144px;max-width:190px;padding:7px 7px 5px;min-height:77px;bottom:0}
+.manor-twelve .rear-seat .manor-nameplate{bottom:0}
+.table-scene.manor-twelve .player .player-name{font-size:12px;line-height:21px}
+.table-scene.manor-twelve .player .player-role{font-size:12px;font-weight:800;max-width:85px;line-height:18px}
+.table-scene.manor-twelve .player .player-state{font-size:10px}
+.manor-twelve .plate-heading{gap:4px}
+.manor-twelve .life-mark{font-size:9px}
+.table-scene.manor-twelve .player .manor-avatar-fallback{top:2%;width:74px;height:80px;font-size:43px}
+.manor-twelve .manor-portrait{object-position:center top}
+.manor-twelve .portrait-eyelids{object-position:center top}
+.portrait-pending{position:absolute;top:41%;left:50%;transform:translateX(-50%);white-space:nowrap;color:#e2c9a0;background:#21170dcc;font-size:9px;padding:2px 5px;border-radius:4px;z-index:4}
+.manor-twelve .portrait-pending{top:46%}
+.manor-twelve .player-avatar.face-anchor{top:5%!important}
+.manor-twelve .pulsing .manor-avatar-fallback{box-shadow:0 0 0 3px #e0bb72,0 0 18px #e6b75599}
+.manor-twelve .speech-bubble{z-index:12}
+.watch-mode.manor-mode .table-panel:has(.manor-twelve) .table-viewport{min-width:0;max-width:calc(100% - 16px);width:var(--stage-fit-width,100%);overflow:auto}
+.table-panel:has(.manor-twelve) .table-scroll-hint{display:block}
+@media(min-width:1101px){.watch-mode.manor-mode .table-panel .table-scene.manor-twelve{min-width:1140px}}
+@media(max-width:1100px){.manor-mode .table-panel .table-scene.manor-twelve{min-width:1140px}.manor-twelve .manor-nameplate{font-size:12px}}
+@media(prefers-reduced-motion:reduce){.manor-twelve .pulsing .manor-portrait{animation:none;filter:drop-shadow(0 0 8px #e0bb72)}}
+@media(max-width:700px){
+  .manor-mode #tableView:has(.manor-twelve) .spectator-rail{position:relative;inset:auto;top:auto!important;width:auto;height:62dvh;max-height:62dvh;z-index:1;margin:0}
+}

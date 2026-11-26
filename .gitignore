@@ -1,0 +1,30 @@
+# Local environments and dependencies
+node_modules/
+.video-venv/
+.voice-venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+!.env.example
+
+# Runtime data and generated artifacts
+output/
+logs/
+.playwright-cli/
+.tmp*
+*.log
+*.tap
+*.pid
+*.tmp
+*.tmp.html
+
+# Local test reports and accidental scratch files
+/cinema-run.txt
+/full-test-tap-final.txt
+/test-current.txt
+/test-output*.txt
+/({c
+/({i
+/[c.seat
