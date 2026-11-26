@@ -381,6 +381,9 @@ test('测试连接使用同一转发通道，保存后保留连接结果与已�
   const {context,requests,saved}=setup();
   assert.equal(await vm.runInContext('testConnection(profiles[8],false)',context),true);
   assert.equal(requests[0].messages[0].content,'Reply with OK.');
+  assert.equal(requests[0].purpose,'connection-test');
+  assert.equal(requests[0].maxTokens,350);
+  assert.equal('reasoningEffort' in requests[0],false);
   vm.runInContext("openAgent(8);lastConnectionTest={signature:connectionSignature(profiles[8]),connection:'ok'};saveAgent()",context);
   assert.equal(vm.runInContext('profiles[8].connection',context),'ok');
   assert.equal(JSON.parse(saved.get('nightfall-profiles-v1'))[8].key,'secret-test-key');
@@ -1945,7 +1948,9 @@ test('六人与十二人旧 Agent 配置恢复后发言上限、token预算及 x
     assert.equal(vm.runInContext('profiles[0].model', restored.context), 'test-model-' + count);
     assert.equal(vm.runInContext('profiles[0].reasoningEffort', restored.context), 'xhigh');
     await vm.runInContext("apiCall(profiles[0],[{role:'user',content:'test'}])", restored.context);
-    assert.equal(restored.requests.at(-1).reasoningEffort, 'xhigh');
+    assert.equal(restored.requests.at(-1).purpose, 'connection-test');
+    assert.equal(restored.requests.at(-1).maxTokens, 350);
+    assert.equal('reasoningEffort' in restored.requests.at(-1), false);
     vm.runInContext('renderAgents()', restored.context);
     assert.match(vm.runInContext("$('agentGrid').innerHTML", restored.context), /推理强度 · 超高（xhigh）/);
   }

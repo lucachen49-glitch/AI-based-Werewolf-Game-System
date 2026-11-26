@@ -30,15 +30,15 @@
     return url.href;
   }
 
-  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,actionTask,actionRole,allowedTargets,nightOptions}){
+  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,max_tokens=OUTPUT_MAX_TOKENS,actionTask,actionRole,allowedTargets,nightOptions}){
     const body={
       model:model.trim(),
       input:messages.map(message=>({role:message.role,content:inputContent(message.content)})),
-      reasoning:{effort:normalizeReasoningEffort(reasoning_effort)},
-      max_output_tokens:OUTPUT_MAX_TOKENS,
+      max_output_tokens:max_tokens,
       stream:false,
       store:false
     };
+    if(reasoning_effort!==null)body.reasoning={effort:normalizeReasoningEffort(reasoning_effort)};
     if(actionTask==='speech')body.text={format:{
       type:'json_schema',
       name:'werewolf_speech',

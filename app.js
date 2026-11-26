@@ -1,5 +1,5 @@
 'use strict';
-const Limits=globalThis.NightfallLimits||{SPEECH_CHAR_LIMIT:1400,AGENT_OUTPUT_MAX_TOKENS:25000,SPEECH_OUTPUT_MAX_TOKENS:25000,ACTION_OUTPUT_MAX_TOKENS:25000,SPEECH_BROWSER_TIMEOUT_MS:280000,AGENT_BROWSER_TIMEOUT_MS:185000,truncateUnicode:(value,limit=1400)=>Array.from(String(value??'')).slice(0,limit).join(''),unicodeLength:value=>Array.from(String(value??'')).length};
+const Limits=globalThis.NightfallLimits||{SPEECH_CHAR_LIMIT:1400,AGENT_OUTPUT_MAX_TOKENS:25000,SPEECH_OUTPUT_MAX_TOKENS:25000,ACTION_OUTPUT_MAX_TOKENS:25000,CONNECTION_TEST_OUTPUT_MAX_TOKENS:350,SPEECH_BROWSER_TIMEOUT_MS:280000,AGENT_BROWSER_TIMEOUT_MS:185000,truncateUnicode:(value,limit=1400)=>Array.from(String(value??'')).slice(0,limit).join(''),unicodeLength:value=>Array.from(String(value??'')).length};
 const limitSpeech=value=>Limits.truncateUnicode(value,Limits.SPEECH_CHAR_LIMIT);
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -443,7 +443,12 @@ async function takeTurn(id,task,text,token,extra={},preparation=null){
 }
 function localDecision(id,task,extra={}){const p=game.players[id],c={...game.context(id),checks:game.knowledge[id]||{}};let targets=game.alive().filter(x=>x.id!==id);if(p.role==='狼人'&&task==='night')targets=game.alive();if(p.role==='守卫'&&task==='night')targets=game.alive().filter(x=>x.id!==game.lastGuard);if(game.pk&&task==='vote')targets=targets.filter(x=>game.pk.includes(x.id));const knownWolf=Object.entries(c.checks).find(([target,result])=>result==='狼人'&&game.players[target].alive);let target=knownWolf&&p.role!=='狼人'?+knownWolf[0]:game.pick(targets)?.id??null;if(task==='vote'&&p.role==='狼人'){const nonWolf=targets.filter(x=>x.role!=='狼人');target=game.pick(nonWolf)?.id??target}if(task==='night'&&p.role==='女巫')return {save:extra.victim!==null&&game.potions.save&&(extra.victim!==id||game.round===1),poison:null};if(task==='speech'){const recent=game.speeches.at(-1);const suspicion=target!==null?`${target+1} 号`:'目前的票型';const styles=[`我更关注${suspicion}的发言，理由和结论之间还有空白，想听听你的解释。`,`先别急着跟票。我建议把每个人的判断依据记下来，再对比前后有没有变化。`,`我会重点观察${suspicion}。这只是当前怀疑，不是确定信息，大家独立判断。`,`听完${recent?`${recent.id+1} 号`:'前面玩家'}的分析，我想追问：你的信息来自身份，还是推测？`,`这一轮我倾向于少暴露神职。先把可疑的逻辑说清楚，不要只凭感觉。`,`如果票型过于一致，我反而会小心。狼人也会藏在正确的意见里。`];let text=styles[(id+game.round)%styles.length];if(p.role==='预言家'&&knownWolf)text=`我跳预言家，查验到 ${+knownWolf[0]+1} 号是狼人。我会为这个信息负责。`;return {speech:text}}return {target};}
 function parseAgent(raw){return NightfallAgentRequest.parseActionJSON(raw)}
-async function apiCall(profile,messages,{maxTokens=Limits.ACTION_OUTPUT_MAX_TOKENS,attempt,allowedTargets,role,nightOptions}={}){
+async function apiCall(profile,messages,{maxTokens,attempt,allowedTargets,role,nightOptions}={}){
+  if(maxTokens===undefined){
+    maxTokens=attempt
+      ? Limits.ACTION_OUTPUT_MAX_TOKENS
+      : Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS;
+  }
   if(!profile.endpoint||!profile.model)throw Object.assign(Error('请填写接口地址和模型'),{code:'INVALID_CONFIG'});
   if(globalThis.location?.protocol==='file:')throw Error('请双击 start-game.cmd 启动游戏，再从 http://127.0.0.1:4173 访问');
   let url;try{url=new URL(profile.endpoint)}catch{throw Object.assign(Error('接口地址格式不正确'),{code:'INVALID_ENDPOINT'})}
@@ -455,7 +460,7 @@ async function apiCall(profile,messages,{maxTokens=Limits.ACTION_OUTPUT_MAX_TOKE
     if(attempt)attempt.sent=true;
     const res=await fetch('/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',redirect:'error',
-      body:JSON.stringify({endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,messages,maxTokens,reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),purpose:attempt?'game-action':'connection-test',...(attempt?{gameId,requestId:attempt.requestId,action:{task:attempt.task,seat:attempt.id+1,round:attempt.round,...(role?{role}:{}),...(['vote','night'].includes(attempt.task)&&Array.isArray(allowedTargets)?{allowedTargets}:{}),...(attempt.task==='night'&&nightOptions?{nightOptions}:{})}}:{})}),signal:controller.signal
+      body:JSON.stringify({endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,messages,maxTokens,purpose:attempt?'game-action':'connection-test',...(attempt?{reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),gameId,requestId:attempt.requestId,action:{task:attempt.task,seat:attempt.id+1,round:attempt.round,...(role?{role}:{}),...(['vote','night'].includes(attempt.task)&&Array.isArray(allowedTargets)?{allowedTargets}:{}),...(attempt.task==='night'&&nightOptions?{nightOptions}:{})}}:{})}),signal:controller.signal
     });
     if(attempt)attempt.httpStatus=res.status;
     const data=await res.json().catch(()=>null);

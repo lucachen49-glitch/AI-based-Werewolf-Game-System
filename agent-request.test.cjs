@@ -36,9 +36,11 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
         {role:'assistant',content:[{type:'input_text',text:'previous answer'}]},
         {role:'user',content:[{type:'input_text',text:'next'}]}
       ],
-      reasoning:{effort:effort||'xhigh'},max_output_tokens:25000,stream:false,store:false
+      reasoning:{effort:effort||'xhigh'},max_output_tokens:350,stream:false,store:false
     });
   }
+  const connection=Agent.responsesBody({model:'model',messages:[{role:'user',content:'Reply with OK.'}],reasoning_effort:null,max_tokens:350});
+  assert.deepEqual(connection,{model:'model',input:[{role:'user',content:[{type:'input_text',text:'Reply with OK.'}]}],max_output_tokens:350,stream:false,store:false});
   assert.equal(JSON.stringify(messages),before);
   assert.equal(Limits.AGENT_OUTPUT_MAX_TOKENS,Agent.OUTPUT_MAX_TOKENS);
   assert.equal(Limits.SPEECH_CHAR_LIMIT,1400);

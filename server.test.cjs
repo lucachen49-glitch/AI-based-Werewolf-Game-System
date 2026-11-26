@@ -72,10 +72,10 @@ test('真实 HTTP 转发不依赖供应商 CORS，模型密钥独立，响应保
   assert.equal(seen[0].url,'/v1/responses');
   assert.equal(seen[0].headers.authorization,'Bearer test-secret-only');
   assert.equal(seen[0].headers.origin,undefined);
-  assert.deepEqual(seen[0].body,{model:'gpt-6-astra',input:[{role:'user',content:[{type:'input_text',text:'Reply with OK.'}]}],reasoning:{effort:'xhigh'},max_output_tokens:25000,stream:false,store:false});
+  assert.deepEqual(seen[0].body,{model:'gpt-6-astra',input:[{role:'user',content:[{type:'input_text',text:'Reply with OK.'}]}],max_output_tokens:350,stream:false,store:false});
   const second=await post({model:'another-model',apiKey:'another-key'});assert.equal(second.status,200);
-  assert.equal(seen[1].body.model,'another-model');assert.equal(seen[1].headers.authorization,'Bearer another-key');assert.equal(seen[1].body.max_output_tokens,25000);
-  const speech=await post({maxTokens:4000});assert.equal(speech.status,200);assert.equal(seen[2].body.max_output_tokens,25000);
+  assert.equal(seen[1].body.model,'another-model');assert.equal(seen[1].headers.authorization,'Bearer another-key');assert.equal(seen[1].body.max_output_tokens,350);assert.equal(seen[1].body.reasoning,undefined);
+  const speech=await post({maxTokens:4000});assert.equal(speech.status,200);assert.equal(seen[2].body.max_output_tokens,350);assert.equal(seen[2].body.reasoning,undefined);
   for(const maxTokens of [0,351,3999,4001])assert.equal((await post({maxTokens})).status,400);
   assert.equal(JSON.stringify(seen.map(s=>s.body)).includes('test-secret-only'),false);
 });
@@ -278,7 +278,7 @@ test('6/12 人自然讲解 MP3 可播放下载及 HEAD 查询，制作脚本和�
 
 test('推理强度缺省和显式值按配置转发，其他值在提交前拒绝', async t => {
   const {post, seen} = await fixture(t);
-  for (const [body, expected] of [[{}, 'xhigh'], [{reasoningEffort:'xhigh'}, 'xhigh'], [{reasoningEffort:'high'}, 'high']]) {
+  for (const [body, expected] of [[{purpose:'game-action'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'xhigh'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'high'}, 'high']]) {
     assert.equal((await post(body)).status, 200);
     assert.equal(seen.at(-1).body.reasoning.effort, expected);
   }
@@ -297,7 +297,7 @@ test('供应商拒绝 xhigh 时保留明确错误且不泄露凭据、不自动�
       res.end(JSON.stringify({error:{code:'unsupported_value', param:'reasoning_effort',
         message:'reasoning_effort xhigh is not supported; test-secret-only'}}));
     }});
-    const response = await post();
+    const response = await post({purpose:'game-action'});
     assert.equal(response.status, status);
     const data = await response.json();
     assert.equal(data.error.code, 'REASONING_EFFORT_UNSUPPORTED');
@@ -558,6 +558,8 @@ test('连接测试不加行动格式，投票和夜间按合法目标与角色�
   const {post,seen}=await fixture(t);
   const connection=await post({purpose:'connection-test'});
   assert.equal(connection.status,200);
+  assert.equal(seen.at(-1).body.max_output_tokens,350);
+  assert.equal(seen.at(-1).body.reasoning,undefined);
   assert.equal(seen.at(-1).body.text,undefined);
   const genericNight=await post({purpose:'game-action',action:{task:'night',seat:6,round:1,allowedTargets:[1,3,5]}});
   assert.equal(genericNight.status,200);

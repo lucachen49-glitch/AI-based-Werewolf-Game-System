@@ -163,7 +163,7 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     if(Buffer.byteLength(JSON.stringify(body))>options.maxRequestBytes)throw new ApiError(413,'REQUEST_TOO_LARGE','完整历史上下文超过本地服务的请求容量上限，系统未删减或概括内容，请检查容量后手动处理');
     const endpoint=normalizeEndpoint(body.endpoint);
     if(!gameAction)timer=setTimeout(()=>{timedOut=true;controller.abort()},options.upstreamTimeoutMs);
-    const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:body.reasoningEffort,actionTask:gameAction?body.action?.task:undefined,actionRole:gameAction?body.action?.role:undefined,allowedTargets:body.action?.allowedTargets,nightOptions:body.action?.nightOptions});
+    const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:gameAction?body.reasoningEffort:null,max_tokens:gameAction?Limits.ACTION_OUTPUT_MAX_TOKENS:Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS,actionTask:gameAction?body.action?.task:undefined,actionRole:gameAction?body.action?.role:undefined,allowedTargets:body.action?.allowedTargets,nightOptions:body.action?.nightOptions});
     if(diagnostic&&requestBody.text)diagnostic.requestedFormat=requestBody.text.format.type;
     if(controller.signal.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});
     const upstream=await (gameAction?options.gameFetchImpl:options.fetchImpl)(endpoint,{
