@@ -1144,7 +1144,13 @@ async function testConnection(profile=modalProfile(),updateModal=true){
     return true;
   }catch(e){
     if(batch?.cancelled){update('untested');return false}
-    const msg=e.name==='AbortError'?'请求超时或已取消':e.message;update('error',msg);
+    const msg=e.name==='AbortError'?'请求超时或已取消':e.message;
+    if(batch&&e.code==='GAME_REQUESTS_ACTIVE'){
+      batch.blockedReason=msg;update('untested',msg);
+      if(updateModal)$('connectionState').textContent=msg;
+      return false;
+    }
+    update('error',msg);
     if(updateModal)$('connectionState').textContent=msg;
     if(!batch)toast(`连接失败：${msg}`);
     return false;
@@ -1167,12 +1173,13 @@ async function testAll(){
       if(batch.cancelled)break;
       batch.index=index+1;batch.seat=profiles.indexOf(p);
       if(await testConnection(p,false))ok++;
+      if(batch.blockedReason)break;
     }
   }finally{
     for(const p of api)if(['queued','testing'].includes(p.connection)){p.connection='untested';p.connectionError=''}
     connectionBatch=null;renderConnectionViews();
   }
-  toast(batch.cancelled?'连接测试已停止':`${ok} / ${api.length} 个 API Agent 连接成功`);
+  toast(batch.cancelled?'连接测试已停止':batch.blockedReason||`${ok} / ${api.length} 个 API Agent 连接成功`);
 }
 
 document.querySelectorAll('.room-option').forEach(b=>b.addEventListener('click',()=>{if(+b.dataset.room!==size)requestReset(+b.dataset.room)}));

@@ -151,8 +151,8 @@ function assistantOutputText(data){
 
 async function executeChat(body,options,controller,onRequest=()=>{}){
   const startedAt=Date.now(),gameAction=body?.purpose==='game-action';
-  let timer,timedOut=false,diagnostic=null,httpStatus,responseData;
-  const log=(event,code,details={})=>{if(diagnostic)options.agentLogger({...diagnostic,event,code,httpStatus,durationMs:Date.now()-startedAt,...details})};
+  let timer,timedOut=false,diagnostic=null,httpStatus,responseData,gameRequestKey=null;
+  const log=(event,code,details={})=>{if(diagnostic)options.agentLogger({...diagnostic,event,code,httpStatus,durationMs:Date.now()-startedAt,activeGameRequests:options.activeGameRequests?.size||0,...details})};
   try{
     if(gameAction){
       const metadata=safeEntry({requestId:body.requestId,gameId:body.gameId,task:body.action?.task,seat:body.action?.seat,round:body.action?.round});
@@ -163,14 +163,20 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task))diagnostic.requestContext=body.messages;
     if(Buffer.byteLength(JSON.stringify(body))>options.maxRequestBytes)throw new ApiError(413,'REQUEST_TOO_LARGE','完整历史上下文超过本地服务的请求容量上限，系统未删减或概括内容，请检查容量后手动处理');
     const endpoint=normalizeEndpoint(body.endpoint);
-    const requestTimeoutMs=gameAction?0:Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs);
-    if(!gameAction)timer=setTimeout(()=>{timedOut=true;controller.abort()},requestTimeoutMs);
+    if(!gameAction&&options.activeGameRequests?.size)throw new ApiError(409,'GAME_REQUESTS_ACTIVE','当前仍有游戏 Agent 请求正在处理，请等待本局请求完成后再测试连接');
+    const requestTimeoutMs=gameAction?options.gameRequestTimeoutMs:Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs);
+    if(requestTimeoutMs>0)timer=setTimeout(()=>{timedOut=true;controller.abort()},requestTimeoutMs);
     const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:gameAction?body.reasoningEffort:null,max_tokens:gameAction?Limits.ACTION_OUTPUT_MAX_TOKENS:Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS,actionTask:gameAction?body.action?.task:undefined,actionRole:gameAction?body.action?.role:undefined,allowedTargets:body.action?.allowedTargets,nightOptions:body.action?.nightOptions});
     if(diagnostic&&requestBody.text)diagnostic.requestedFormat=requestBody.text.format.type;
     if(controller.signal.aborted)throw Object.assign(Error('Cancelled'),{name:'AbortError'});
+    if(gameAction){
+      gameRequestKey=randomUUID();
+      options.beginGameRequest?.(gameRequestKey,{requestId:diagnostic?.requestId,gameId:diagnostic?.gameId,task:diagnostic?.task,seat:diagnostic?.seat,round:diagnostic?.round});
+    }
     const upstream=await (gameAction?options.gameFetchImpl:options.connectionFetchImpl)(endpoint,{
       method:'POST',redirect:'error',signal:controller.signal,
-      ...(gameAction?{}:{timeoutMs:requestTimeoutMs,retries:options.connectionRetries,retryDelayMs:options.connectionRetryDelayMs}),
+      timeoutMs:requestTimeoutMs,
+      ...(gameAction?{}:{retries:options.connectionRetries,retryDelayMs:options.connectionRetryDelayMs}),
       headers:{'Content-Type':'application/json',...(body.apiKey?{Authorization:'Bearer '+body.apiKey.trim()}:{})},
       body:JSON.stringify(requestBody)
     });
@@ -193,13 +199,13 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     }
     log('response_received',undefined,{assistantResponse:diagnostic?.assistantResponse??result.choices[0].message.content});return result;
   }catch(error){
-    const failure=timedOut?new ApiError(504,'UPSTREAM_TIMEOUT',`接口等待超过 ${Math.ceil((gameAction?options.upstreamTimeoutMs:options.connectionTimeoutMs)/1000)} 秒，请稍后重试`):controller.signal.aborted?new ApiError(499,'REQUEST_CANCELLED','请求已取消'):error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
+    const failure=timedOut?new ApiError(504,'UPSTREAM_TIMEOUT',`接口等待超过 ${Math.ceil((gameAction?options.gameRequestTimeoutMs:options.connectionTimeoutMs)/1000)} 秒，请稍后重试`):controller.signal.aborted?new ApiError(499,'REQUEST_CANCELLED','请求已取消'):error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
     httpStatus??=failure.status;
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task)&&!diagnostic.assistantResponse)diagnostic.assistantResponse=assistantOutputText(responseData);
     log(controller.signal.aborted&&!timedOut?'cancelled':'failed',failure.code,{errorMessage:failure.message,assistantResponse:diagnostic?.assistantResponse});
     if(diagnostic)failure.requestId=diagnostic.requestId;
     throw failure;
-  }finally{clearTimeout(timer)}
+  }finally{clearTimeout(timer);if(gameRequestKey)options.endGameRequest?.(gameRequestKey)}
 }
 
 async function handleChat(req,res,options){
@@ -217,6 +223,7 @@ async function handleChat(req,res,options){
   }catch(error){
     if(disconnected||res.destroyed)return;
     const failure=error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
+    if(failure.code==='GAME_REQUESTS_ACTIVE')res.setHeader('Retry-After','1');
     sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message},...(failure.requestId?{requestId:failure.requestId}:{})});
   }finally{req.off('aborted',cancel);res.off('close',close)}
 }
@@ -356,8 +363,12 @@ async function handleAgentConfig(req,res,store){
     sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message}});
   }
 }
-function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
+function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,gameRequestTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
   const instanceVersion=randomUUID();
+  const activeGameRequests=new Map();
+  const beginGameRequest=(key,details)=>activeGameRequests.set(key,{...details,startedAt:Date.now()});
+  const endGameRequest=key=>activeGameRequests.delete(key);
+  const chatOptions={fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,gameRequestTimeoutMs,maxRequestBytes,agentLogger,activeGameRequests,beginGameRequest,endGameRequest};
   const speechOptions={fetchImpl,speechTimeoutMs,synthesizeImpl,state:{active:0}};
   const stories=require('./story-api.cjs').createStoryAPI({fetchImpl,store:storyStore,config:videoConfigStore,jobs:videoJobs,artJobs,imageConfig:imageConfigStore,readJSON,sendJSON,validateChat,normalizeEndpoint,readUpstream,upstreamError});
   const recordings=require('./recording-api.cjs').createRecordingAPI({sendJSON,readJSON,...recordingOptions});
@@ -374,11 +385,11 @@ function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetc
     if(gameLogMatch){void handleGameLog(req,res,agentGameLogDirectory,gameLogMatch[1]);return;}
     if(name==='api/chat/batch'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}})}
-      void handleChatBatch(req,res,{fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
+      void handleChatBatch(req,res,chatOptions);return;
     }
     if(name==='api/chat'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}});}
-      void handleChat(req,res,{fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,maxRequestBytes,agentLogger});return;
+      void handleChat(req,res,chatOptions);return;
     }
     if(name==='api/speech'){
       if(req.method!=='POST'){res.setHeader('Allow','POST');return sendJSON(res,405,{error:{code:'METHOD_NOT_ALLOWED',message:'此接口仅支持 POST 请求'}})}

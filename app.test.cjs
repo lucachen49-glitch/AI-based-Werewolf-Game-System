@@ -885,6 +885,21 @@ test('批量测试即时排队、逐席位加载与结果同步，重复操作�
   assert.equal(vm.runInContext('profiles[2].connection',context),'ok');
 });
 
+test('服务端仍有对局请求时批量连接测试停止并显示明确提示', async () => {
+  const {context} = setup();
+  let requests = 0;
+  vm.runInContext("reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]}", context);
+  context.fetch = async () => {
+    requests++;
+    return {ok:false, status:409, json:async()=>({error:{code:'GAME_REQUESTS_ACTIVE', message:'当前仍有游戏 Agent 请求正在处理，请等待本局请求完成后再测试连接'}})};
+  };
+  await vm.runInContext('testAll()', context);
+  assert.equal(requests, 1);
+  assert.match(vm.runInContext("$('toast').textContent", context), /等待本局请求完成/);
+  assert.equal(vm.runInContext('profiles[2].connection', context), 'untested');
+  assert.equal(vm.runInContext('connectionBatch', context), null);
+});
+
 test('批量测试重置取消后不遗留加载状态，不再请求排队席位',async()=>{
   const {context}=setup();let requests=0;
   vm.runInContext('reset(12);profiles[0]={...profiles[8]}',context);

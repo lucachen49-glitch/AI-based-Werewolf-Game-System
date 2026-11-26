@@ -690,6 +690,93 @@ test('格式诊断仅保存允许的请求与返回格式名称',()=>{
   assert.equal(invalid.reportedFormat,undefined);
 });
 
+
+test('单个对局请求进行中时连接测试立即返回忙碌，结束后恢复正常', async t => {
+  let gameResponse;
+  let gameStarted;
+  const started = new Promise(resolve => gameStarted = resolve);
+  const f = await fixture(t, {
+    handler(req, res, entry) {
+      if (entry.body.max_output_tokens === 25000) {
+        gameResponse = res;
+        gameStarted();
+        return;
+      }
+      res.end(JSON.stringify(agentResponse('OK')));
+    }
+  });
+  const game = f.post({purpose:'game-action', requestId:'active-single', action:{task:'vote', seat:1, round:1}});
+  await bounded(started);
+  const begin = Date.now();
+  const blocked = await f.post({purpose:'connection-test'});
+  assert.equal(blocked.status, 409);
+  assert.equal((await blocked.json()).error.code, 'GAME_REQUESTS_ACTIVE');
+  assert.ok(Date.now() - begin < 500);
+  gameResponse.end(JSON.stringify(agentResponse('{"target":1}')));
+  assert.equal((await game).status, 200);
+  const recovered = await f.post({purpose:'connection-test'});
+  assert.equal(recovered.status, 200);
+});
+
+test('单个对局请求取消后清理活跃状态，连接测试可以继续', async t => {
+  let gameStarted;
+  const started = new Promise(resolve => gameStarted = resolve);
+  const f = await fixture(t, {
+    handler(req, res, entry) {
+      if (entry.body.max_output_tokens === 25000) {
+        gameStarted();
+        return;
+      }
+      res.end(JSON.stringify(agentResponse('OK')));
+    }
+  });
+  const controller = new AbortController();
+  const game = f.post({purpose:'game-action', requestId:'cancel-active', action:{task:'vote', seat:1, round:1}}, {signal:controller.signal});
+  await bounded(started);
+  controller.abort();
+  await assert.rejects(game, {name:'AbortError'});
+  const recovered = await f.post({purpose:'connection-test'});
+  assert.equal(recovered.status, 200);
+});
+
+test('对局批次的所有席位都纳入活跃请求计数并在批次结束后清理', async t => {
+  const waiting = [];
+  const f = await fixture(t, {
+    handler(req, res, entry) {
+      if (entry.body.max_output_tokens === 25000) {
+        waiting.push(res);
+        return;
+      }
+      res.end(JSON.stringify(agentResponse('OK')));
+    }
+  });
+  const requests = batchRequests(f.profile, 2);
+  const batch = await batchPost(f, requests);
+  await eventually(() => waiting.length === 2);
+  const blocked = await f.post({purpose:'connection-test'});
+  assert.equal(blocked.status, 409);
+  assert.equal((await blocked.json()).error.code, 'GAME_REQUESTS_ACTIVE');
+  for (const res of waiting) res.end(JSON.stringify(agentResponse('{"target":1}')));
+  assert.match(await batch.text(), /"type":"complete"/);
+  const recovered = await f.post({purpose:'connection-test'});
+  assert.equal(recovered.status, 200);
+});
+
+test('对局请求达到独立超时后清理活跃状态并返回超时错误', async t => {
+  const f = await fixture(t, {
+    gameRequestTimeoutMs: 25,
+    handler(req, res, entry) {
+      if (entry.body.max_output_tokens === 25000) return;
+      res.end(JSON.stringify(agentResponse('OK')));
+    }
+  });
+  const response = await f.post({purpose:'game-action', requestId:'game-timeout', action:{task:'vote', seat:1, round:1}});
+  assert.equal(response.status, 504);
+  assert.equal((await response.json()).error.code, 'UPSTREAM_TIMEOUT');
+  const recovered = await f.post({purpose:'connection-test'});
+  assert.equal(recovered.status, 200);
+});
+
 async function batchPost(f,requests,options={}){
   return fetch(f.base+'/api/chat/batch',{method:'POST',headers:{Origin:f.base,'Content-Type':'application/json'},body:JSON.stringify({requests}),...options});
 }
