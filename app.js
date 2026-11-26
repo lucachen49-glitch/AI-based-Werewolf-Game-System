@@ -3,7 +3,8 @@ const Limits=globalThis.NightfallLimits||{SPEECH_CHAR_LIMIT:1400,AGENT_OUTPUT_MA
 const limitSpeech=value=>Limits.truncateUnicode(value,Limits.SPEECH_CHAR_LIMIT);
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const AVATARS=['🦊','🦉','🐺','🐼','🦁','🐰','🐸','🐯','🐨','🦌','🐱','🐙','🦝','🐻','🐹','🦄'];
+const Avatar=NightfallAvatar;
+const AVATARS=Avatar.AVATARS;
 const NAMES=['岚','夜莺','白桃','灰塔','阿洛','星野','栗子','白昼','青禾','渡鸦','小满','南枝'];
 const PERSONALITIES=['沉着、有主见，愿意为自己的判断承担风险。','逻辑清晰，习惯对比前后发言。','开朗幽默，擅长用问题试探别人。','谨慎内敛，关注每一处细节。','勇敢直接，总能提出不同的观点。','温柔坚定，善于倾听并总结信息。'];
 const BOARDS={6:{title:'经典 6 人局',roles:['狼人 × 2','预言家 × 1','女巫 × 1','平民 × 2'],note:'2 狼 · 2 神 · 2 民，轻量入门。'},12:{title:'守卫猎人 12 人局',roles:['狼人 × 4','预言家 × 1','女巫 × 1','猎人 × 1','守卫 × 1','平民 × 4'],note:'4 狼 · 4 神 · 4 民，无警长标准局。'}};
@@ -22,7 +23,7 @@ function buildProfiles(saved){
     const stored=source[i]&&typeof source[i]==='object'?source[i]:{};
     const rememberKey=stored.rememberKey!==false;
     const reasoningEffort=NightfallAgentRequest.normalizeReasoningEffort(stored.reasoningEffort);
-    return {name:NAMES[i],avatar:AVATARS[i],control:'local',endpoint:'',model:'',reasoningEffort,personality:PERSONALITIES[i%6],...Voices.settings(stored,i),voiceMatch:Manor.voiceMatchMode(stored,i,Voices.defaults(i)),manorPortrait:Manor.normalize(stored.manorPortrait,i),rememberKey,key:rememberKey&&typeof stored.key==='string'?stored.key:'',voiceKey:stored.rememberVoiceKey!==false&&typeof stored.voiceKey==='string'?stored.voiceKey:'',connection:'untested',connectionError:''};
+    return {name:NAMES[i],avatar:AVATARS[i],control:'local',endpoint:'',model:'',reasoningEffort,personality:PERSONALITIES[i%6],...Voices.settings(stored,i),avatar:Avatar.normalize(stored.avatar,i),voiceMatch:Manor.voiceMatchMode(stored,i,Voices.defaults(i)),manorPortrait:Manor.normalize(stored.manorPortrait,i),rememberKey,key:rememberKey&&typeof stored.key==='string'?stored.key:'',voiceKey:stored.rememberVoiceKey!==false&&typeof stored.voiceKey==='string'?stored.voiceKey:'',connection:'untested',connectionError:''};
   });
 }
 function loadProfiles(){return buildProfiles(readLocalProfileRecord().profiles)}
@@ -271,7 +272,7 @@ function togglePause(){
   releaseWait();wakeAPIWait();wakeVoteBatch();wakePresentation();renderAll();
 }
 const phaseLabels={lobby:'准备 · 等待入座',night:'夜晚 · 秘密行动',discussion:'白天 · 轮流发言',voting:'白天 · 公开投票',hunter:'技能 · 猎人开枪',ended:'终局 · 身份揭晓'};
-function avatarHTML(p){return p.avatar.startsWith('data:image/')?`<img src="${p.avatar}" alt="${esc(p.name)}的卡通形象">`:`<span>${esc(p.avatar)}</span>`}
+function avatarHTML(p){return Avatar.valid(p.avatar)&&p.avatar.startsWith('data:image/')?`<img src="${esc(p.avatar)}" alt="${esc(p.name)}的卡通形象">`:`<span>${esc(p.avatar)}</span>`}
 function manorPortrait(profile,seat){const storyPortrait=typeof sessionStory!=='undefined'&&(sessionStory?.roomSize||6)===size?sessionStory?.characters[seat]?.portraitId:null;const art=Manor.portrait(storyPortrait?{...profile,manorPortrait:storyPortrait}:profile,seat,size);return art&&!failedPortraits.has(art.id)?art:null}
 function seatAvatarHTML(profile,seat){const art=manorPortrait(profile,seat);return art?'<img src="'+Manor.imagePath(art.id,true)+'" data-portrait="'+art.id+'" alt="'+esc(profile.name)+'的庄园形象">':avatarHTML(profile)}
 function name(id){return (typeof sessionStory!=='undefined'&&(sessionStory?.roomSize||6)===size?sessionStory?.characters[id]?.name:null)||profiles[id]?.name||`${id+1}号`}
@@ -282,16 +283,24 @@ function addSpeech(id,text){text=limitSpeech(text);transcript.push({id,text,time
 function syncLogs(night){game.logs.slice(logCursor).forEach(l=>{addFeed(l.phase==='night'?'☾':'✦',l.text,'notice');const e=NightfallObserver.commentary(l,/^天亮了/.test(l.text)?night:null);if(e)addObserver(e)});logCursor=game.logs.length}
 let agentPersistenceRevision=0,agentConfigSyncChain=Promise.resolve();
 function agentConfigServiceAvailable(){return typeof location!=='undefined'&&location.protocol==='http:'&&location.origin&&location.origin!=='null'}
-function serializedProfilesFor(value){return value.map(({key,voiceKey,connection,connectionError,...p})=>({...p,...(p.rememberKey?{key}:{}),...(p.rememberVoiceKey?{voiceKey}:{})}))}
+function serializedProfilesFor(value,{includeSecrets=true}={}){return value.map(({key,voiceKey,connection,connectionError,...p})=>({...p,...(includeSecrets&&p.rememberKey?{key}:{}),...(includeSecrets&&p.rememberVoiceKey?{voiceKey}:{})}))}
 function serializedProfiles(){return serializedProfilesFor(profiles)}
-function writeLocalProfiles(data,savedAt){localStorage.setItem(PROFILE_STORAGE_KEY,JSON.stringify(data));if(savedAt)localStorage.setItem(PROFILE_SAVED_AT_KEY,savedAt)}
-function queueAgentConfigSync(data,clientSavedAt){
+// When the local service is reachable it keeps the DPAPI-encrypted secrets; the browser copy never stores keys.
+function localProfileCopy(data){
+  if(!agentConfigServiceAvailable())return data;
+  const strip=p=>{if(!p||typeof p!=='object')return p;const {key,voiceKey,...rest}=p;return rest};
+  return Array.isArray(data)?data.map(strip):data&&typeof data==='object'?Object.fromEntries(Object.entries(data).map(([k,v])=>[k,strip(v)])):data;
+}
+function localProfilesHaveSecrets(saved){const source=Array.isArray(saved)?saved:saved&&typeof saved==='object'?Object.values(saved):[];return source.some(p=>p&&typeof p==='object'&&((typeof p.key==='string'&&p.key)||(typeof p.voiceKey==='string'&&p.voiceKey)))}
+function writeLocalProfiles(data,savedAt){localStorage.setItem(PROFILE_STORAGE_KEY,JSON.stringify(localProfileCopy(data)));if(savedAt)localStorage.setItem(PROFILE_SAVED_AT_KEY,savedAt)}
+function queueAgentConfigSync(data,clientSavedAt,onSaved){
   if(!agentConfigServiceAvailable())return;
   agentConfigSyncChain=agentConfigSyncChain.then(async()=>{
     try{
       const response=await fetch('/api/agent-config',{method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',body:JSON.stringify({profiles:data,clientSavedAt})});
       const body=await response.json().catch(()=>({}));
       if(!response.ok){toast(body.error?.message||'本机 Agent 配置保存失败，浏览器中的配置仍可使用');return}
+      if(typeof onSaved==='function')onSaved(body);
 
     }catch{toast('本机 Agent 配置保存失败，浏览器中的配置仍可使用')}
   });
@@ -299,6 +308,23 @@ function queueAgentConfigSync(data,clientSavedAt){
 function persist(sync=false){
   const data=serializedProfiles(),savedAt=new Date().toISOString();
   try{writeLocalProfiles(data,savedAt);agentPersistenceRevision++;if(sync)queueAgentConfigSync(data,savedAt);return true}catch{toast('本地存储空间不足，请缩小头像图片后重试');return false}
+}
+// Newer browser data wins, but keys now live only in the local service: reuse its stored secrets,
+// and rewrite legacy plaintext browser copies only after the service confirms the save.
+function adoptLocalProfiles(local,remote,revision){
+  const merged=buildProfiles(local.profiles),stored=remote?.profiles?buildProfiles(remote.profiles):null,savedAt=local.savedAt||new Date().toISOString();
+  if(stored)merged.forEach((p,i)=>{if(!p.key&&p.rememberKey&&stored[i].key)p.key=stored[i].key;if(!p.voiceKey&&p.rememberVoiceKey!==false&&stored[i].voiceKey)p.voiceKey=stored[i].voiceKey});
+  if(revision===agentPersistenceRevision){
+    let filled=false;
+    profiles.forEach((p,i)=>{if(!p.key&&p.rememberKey&&merged[i].key){p.key=merged[i].key;filled=true}if(!p.voiceKey&&p.rememberVoiceKey!==false&&merged[i].voiceKey){p.voiceKey=merged[i].voiceKey;filled=true}});
+    if(filled)renderAll();
+  }
+  const legacy=localProfilesHaveSecrets(local.profiles);
+  queueAgentConfigSync(serializedProfilesFor(merged),savedAt,()=>{
+    if(!legacy)return;
+    const current=readLocalProfileRecord();
+    if(current.profiles&&current.savedAt===local.savedAt)writeLocalProfiles(current.profiles,current.savedAt);
+  });
 }
 async function restoreAgentProfiles(){
   if(!agentConfigServiceAvailable())return;
@@ -310,12 +336,12 @@ async function restoreAgentProfiles(){
     if(remote.configured&&Array.isArray(remote.profiles)){
       const localTime=local.savedAt?Date.parse(local.savedAt):NaN,remoteTime=remote.savedAt?Date.parse(remote.savedAt):NaN;
       if(local.profiles&&Number.isFinite(localTime)&&Number.isFinite(remoteTime)&&localTime>remoteTime){
-        queueAgentConfigSync(serializedProfilesFor(buildProfiles(local.profiles)),local.savedAt);return;
+        adoptLocalProfiles(local,remote,revision);return;
       }
       if(revision!==agentPersistenceRevision)return;
       profiles=buildProfiles(remote.profiles);writeLocalProfiles(serializedProfiles(),remote.savedAt||new Date().toISOString());renderAll();return;
     }
-    if(local.profiles)queueAgentConfigSync(serializedProfilesFor(buildProfiles(local.profiles)),local.savedAt||new Date().toISOString());
+    if(local.profiles)adoptLocalProfiles(local,null,revision);
   }catch{}
 }
 function renderAll(){renderSidebar();renderStatus();renderPlayers();renderAction();renderFeed();renderTranscript();renderAgents();renderRules();renderSpectator();$('profileBtn').innerHTML=`<span class="mini-avatar">${avatarHTML(profiles[0])}</span><span>${esc(name(0))}</span><span class="chevron">⌄</span>`;}
@@ -367,7 +393,7 @@ function renderPlayers(){
   }).join('');$('seatCount').textContent=game.alive().length+' / '+size;positionSeatOverlays();renderBubble();
   if(typeof renderPortrait==='function')renderPortrait();
 }
-function renderFeed(){$('feedList').innerHTML=feed.length?feed.map(f=>`<div class="feed-item ${f.type}"><div class="feed-avatar">${esc(f.icon)}</div><div class="feed-content"><p>${esc(spectatorPrefs.perspective==='god'?f.text:f.publicText)}</p><span class="feed-time">${f.time}</span></div></div>`).join(''):'<div class="empty-feed">风很轻，故事还没开始。</div>';$('unreadCount').textContent=feed.length;}
+function renderFeed(){$('feedList').innerHTML=feed.length?feed.map(f=>`<div class="feed-item ${esc(f.type)}"><div class="feed-avatar">${esc(f.icon)}</div><div class="feed-content"><p>${esc(spectatorPrefs.perspective==='god'?f.text:f.publicText)}</p><span class="feed-time">${esc(f.time)}</span></div></div>`).join(''):'<div class="empty-feed">风很轻，故事还没开始。</div>';$('unreadCount').textContent=feed.length;}
 function renderTranscript(){
   $('transcript').innerHTML=filteredSpeeches().map(l=>'<article class="record-entry"><div><span class="record-avatar">'+seatAvatarHTML(profiles[l.id],l.id)+'</span><b>'+esc((l.id+1)+' 号 · '+name(l.id))+'</b><small>第 '+l.round+' 轮 · '+(l.pk?'PK':'普通')+'发言 · '+esc(l.time)+'</small></div><p>'+esc(l.text)+'</p><button class="replay-btn" data-record-replay="'+transcript.indexOf(l)+'" '+(!speechAvailable()?'disabled':'')+'>▷ 重播</button></article>').join('')||'<p class="record-empty">暂无发言，天亮后玩家将依次讨论。</p>';
   $('speechState').textContent=game.phase==='ended'?'本局全部发言':'公开发言 · '+transcript.length+' 条';syncRecordScroll();
@@ -1062,8 +1088,8 @@ async function hunter(token=epoch){
 function openAgent(id){if(connectionBatch||connectionTests){toast('正在测试连接，请等待测试完成后修改配置');return}if(busy&&!paused&&!apiWaiting){toast('请先暂停对局，再修改席位配置');return}if(typeof recordingOpenConfig==='function')recordingOpenConfig();selectedAgent=id;lastConnectionTest=null;const p=profiles[id];draftAvatar=p.avatar;lastFocus=document.activeElement;$('modalTitle').textContent=`${id+1} 号 · ${p.name}`;$('modalSubtitle').textContent='独立配置形象、人格与模型，不会暴露本局身份。';$('nameInput').value=p.name;$('controlInput').value=p.control;$('modelInput').value=p.model;$('endpointInput').value=p.endpoint;$('reasoningEffortInput').value=NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort);$('keyInput').value=p.key;$('rememberKeyInput').checked=p.rememberKey;$('keyInput').type='password';$('showKey').textContent='显示';$('personalityInput').value=p.personality;$('avatarUpload').value='';fillVoiceForm(p,id);fillManorForm(p,id);updateVoiceMatch();$('connectionState').textContent='API 协议 · Responses，支持网站地址、/v1 或完整路径，测试会产生一次请求';renderAvatarPicker();$('modalBackdrop').classList.remove('hidden');$('nameInput').focus()}
 function fillManorForm(profile,seat){$('manorPortraitInput').innerHTML=Manor.portraits.map(p=>'<option value="'+p.id+'">'+esc(p.name+' · '+p.description+(p.pending?'（立绘待制作）':''))+'</option>').join('')+'<option value="avatar">使用当前头像</option>';$('manorPortraitInput').value=Manor.normalize(profile.manorPortrait,seat);renderManorPreview()}
 function renderManorPreview(){const id=$('manorPortraitInput').value,art=Manor.portraits.find(p=>p.id===id);$('manorPortraitPreview').innerHTML=art&&!art.pending?'<img src="'+Manor.imagePath(id,true)+'" alt="'+esc(art.name)+'"><span>'+esc(art.description)+'<small>6 / 12 人间通用 · 外观不代表身份</small></span>':'<span>使用当前卡通头像<small>新增六位专属立绘待确认制作；原头像与配置保留</small></span>'}
-function renderAvatarPicker(){$('avatarPicker').innerHTML=AVATARS.map(a=>`<button class="avatar-option ${draftAvatar===a?'selected':''}" data-avatar="${a}" aria-label="选择 ${a}">${a}</button>`).join('')+(draftAvatar.startsWith('data:')?`<img class="uploaded-preview" src="${draftAvatar}" alt="已上传的头像">`:'')}
-function modalProfile(){return {...profiles[selectedAgent],name:$('nameInput').value.trim()||NAMES[selectedAgent],avatar:draftAvatar,manorPortrait:Manor.normalize($('manorPortraitInput').value,selectedAgent),control:$('controlInput').value,model:$('modelInput').value.trim(),endpoint:$('endpointInput').value.trim(),reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort($('reasoningEffortInput').value),key:$('keyInput').value.trim(),rememberKey:$('rememberKeyInput').checked,personality:$('personalityInput').value.trim()||PERSONALITIES[selectedAgent%6],...voiceForm(),connection:'untested',connectionError:''}}
+function renderAvatarPicker(){$('avatarPicker').innerHTML=AVATARS.map(a=>`<button class="avatar-option ${draftAvatar===a?'selected':''}" data-avatar="${esc(a)}" aria-label="选择 ${esc(a)}">${esc(a)}</button>`).join('')+(Avatar.valid(draftAvatar)&&draftAvatar.startsWith('data:')?`<img class="uploaded-preview" src="${esc(draftAvatar)}" alt="已上传的头像">`:'')}
+function modalProfile(){return {...profiles[selectedAgent],name:$('nameInput').value.trim()||NAMES[selectedAgent],avatar:Avatar.normalize(draftAvatar,selectedAgent),manorPortrait:Manor.normalize($('manorPortraitInput').value,selectedAgent),control:$('controlInput').value,model:$('modelInput').value.trim(),endpoint:$('endpointInput').value.trim(),reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort($('reasoningEffortInput').value),key:$('keyInput').value.trim(),rememberKey:$('rememberKeyInput').checked,personality:$('personalityInput').value.trim()||PERSONALITIES[selectedAgent%6],...voiceForm(),connection:'untested',connectionError:''}}
 
 function fillVoiceForm(profile,seat){
   const p=Voices.settings(profile,seat);
@@ -1205,7 +1231,7 @@ $('voiceProviderInput').addEventListener('change',updateVoiceForm);$('voicePrevi
 $('modalClose').addEventListener('click',closeModal);$('modalBackdrop').addEventListener('click',e=>{if(e.target===$('modalBackdrop'))closeModal()});
 document.addEventListener('keydown',e=>{if($('modalBackdrop').classList.contains('hidden'))return;if(e.key==='Escape')closeModal();if(e.key==='Tab'){const items=[...document.querySelectorAll('.modal button,.modal input,.modal select,.modal textarea')].filter(x=>!x.disabled);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
 $('avatarPicker').addEventListener('click',e=>{const a=e.target.closest('[data-avatar]')?.dataset.avatar;if(a){draftAvatar=a;renderAvatarPicker()}});
-$('avatarUpload').addEventListener('change',e=>{const file=e.target.files[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>1024*1024){toast('请选择不大于 1MB 的 PNG、JPG 或 WebP 图片');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{draftAvatar=reader.result;renderAvatarPicker()};reader.readAsDataURL(file)});
+$('avatarUpload').addEventListener('change',e=>{const file=e.target.files[0];if(!file)return;if(!['image/png','image/jpeg','image/webp'].includes(file.type)||file.size>1024*1024){toast('请选择不大于 1MB 的 PNG、JPG 或 WebP 图片');e.target.value='';return}const reader=new FileReader();reader.onload=()=>{if(!Avatar.valid(reader.result)){toast('请选择不大于 1MB 的 PNG、JPG 或 WebP 图片');e.target.value='';return}draftAvatar=reader.result;renderAvatarPicker()};reader.readAsDataURL(file)});
 $('saveAgent').addEventListener('click',saveAgent);$('testConnection').addEventListener('click',()=>testConnection());$('testAllBtn').addEventListener('click',testAll);$('saveAllAgents').addEventListener('click',()=>{if(persist(true))toast('全部配置已保存；勾选记住的密钥将在本机游戏服务加密保存')});$('showKey').addEventListener('click',()=>{const hidden=$('keyInput').type==='password';$('keyInput').type=hidden?'text':'password';$('showKey').textContent=hidden?'隐藏':'显示'});
 $('copyRoomBtn').innerHTML='↗ 导出对局记录';$('copyRoomBtn').addEventListener('click',()=>{const data=spectatorExport();const a=document.createElement('a'),url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.href=url;a.download='夜幕之下-对局记录.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('对局记录已导出，不包含密钥')});
 $('downloadGameLogBtn')?.addEventListener('click',async()=>{try{const url=`/api/game-logs/${encodeURIComponent(gameId)}`;const response=await fetch(url,{method:'HEAD',cache:'no-store'});if(!response.ok){toast(response.status===404?'本局还没有 Agent 请求日志。':'本局日志暂时不可下载，请稍后重试。');return;}const link=document.createElement('a');link.href=url;link.download=`夜幕之下-${gameId}-Agent日志.jsonl`;link.click();}catch{toast('本局日志暂时不可下载，请稍后重试。')}});

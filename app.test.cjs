@@ -5,13 +5,15 @@ const fs=require('node:fs');
 const Nightfall=require('./engine.js');
 
 // Exercise the real game controller and API adapter; inert elements do not test layout.
-function setup(saved=new Map(),fixture=true,systemVoices=true,withStory=false,withPortrait=false){
+function setup(saved=new Map(),fixture=true,systemVoices=true,withStory=false,withPortrait=false,options={}){
   const nodes=new Map(),requests=[],calls=[],timeouts=[];
   function node(id){if(!nodes.has(id)){const classes=new Set(id.endsWith('Backdrop')?['hidden']:[]);nodes.set(id,{value:'',textContent:'',innerHTML:'',style:{},attributes:{},listeners:{},classList:{add(c){classes.add(c)},remove(c){classes.delete(c)},toggle(c,force){const on=force??!classes.has(c);on?classes.add(c):classes.delete(c);return on},contains(c){return classes.has(c)}},addEventListener(k,fn){this.listeners[k]=fn},setAttribute(k,v){this.attributes[k]=v},focus(){}})}return nodes.get(id)}
   const events={};
   if(withPortrait){for(const id of ['portraitHero','portraitFrame'])node(id).dataset={}}
   const context=vm.createContext({Nightfall,console,URL,AbortController,TextDecoder,Uint8Array,performance,location:{protocol:'http:'},setTimeout:(callback,delay)=>{timeouts.push(delay);return setTimeout(callback,delay)},clearTimeout,document:{body:node('body'),documentElement:node('html'),getElementById:node,querySelectorAll:()=>[],addEventListener(event,fn){(events[event]??=[]).push(fn)}},localStorage:{getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)},fetch:async(url,request)=>{calls.push({url,request});requests.push(JSON.parse(request.body));return {ok:true,json:async()=>({choices:[{message:{content:'{"target":1}'}}]})}}});
-  context.NightfallManor=require('./manor.js');context.NightfallVoices=require('./voices.js');context.NightfallObserver=require('./observer.js');
+  if(options.fetchImpl)context.fetch=options.fetchImpl;
+  if(options.origin)context.location.origin=options.origin;
+  context.NightfallAvatar=require('./avatar.js');context.NightfallManor=require('./manor.js');context.NightfallVoices=require('./voices.js');context.NightfallObserver=require('./observer.js');
   context.NightfallAgentRequest=require('./agent-request.js');context.NightfallAudio=require('./soundfx.js');context.NightfallAPIWait=require('./api-wait.js');
   vm.runInContext(fs.readFileSync('spectator.js','utf8'),context);
   if(withStory)for(const file of ['scenario.js','story-player.js','story-game.js'])vm.runInContext(fs.readFileSync(file,'utf8'),context);
@@ -2901,4 +2903,70 @@ test('六与十二人夜间角色音效仅在上帝视角播放',async()=>{
   }
   assert.deepEqual(sounds,perspective==='god'?['wolf','guard','seer','save','poison']:[]);
  }
+});
+
+// --- Hardening: browser storage never keeps keys while the local service holds them ---
+function agentConfigFetch(handler){
+  return async(url,request={})=>{
+    if(url==='/api/agent-config')return handler(request);
+    return {ok:true,status:200,json:async()=>({})};
+  };
+}
+const settle=async context=>{for(let i=0;i<5;i++){await new Promise(resolve=>setTimeout(resolve,5));await vm.runInContext('agentConfigSyncChain',context)}};
+
+test('本机服务可用时浏览器配置不保存密钥，直接打开文件时保留原有本地保存',()=>{
+  const {context,saved}=setup();
+  context.location.origin='http://127.0.0.1:4173';
+  vm.runInContext("profiles[8].rememberKey=true;profiles[8].voiceKey='voice-secret';profiles[8].rememberVoiceKey=true;persist()",context);
+  const stored=saved.get('nightfall-profiles-v1');
+  assert.equal(stored.includes('secret-test-key'),false);
+  assert.equal(stored.includes('voice-secret'),false);
+  assert.equal(vm.runInContext('serializedProfiles()[8].key',context),'secret-test-key');
+  assert.equal(vm.runInContext('serializedProfilesFor(profiles,{includeSecrets:false})[8].key',context),undefined);
+  context.location.protocol='file:';
+  vm.runInContext('persist()',context);
+  assert.equal(saved.get('nightfall-profiles-v1').includes('secret-test-key'),true);
+});
+
+test('旧版浏览器明文密钥先同步到本机服务，确认成功后才从浏览器移除',async()=>{
+  const legacy=JSON.stringify(Array.from({length:12},(_,i)=>i===8?{control:'api',endpoint:'https://example.test',model:'m',key:'legacy-key',rememberKey:true}:{}));
+  for(const ok of [true,false]){
+    const saved=new Map([['nightfall-profiles-v1',legacy]]),posts=[];
+    const {context}=setup(saved,false,true,false,false,{origin:'http://127.0.0.1:4173',fetchImpl:agentConfigFetch(async request=>{
+      if(request.method==='POST'){posts.push(JSON.parse(request.body));return ok?{ok:true,status:200,json:async()=>({configured:true,savedAt:new Date().toISOString()})}:{ok:false,status:500,json:async()=>({error:{message:'本机配置加密暂不可用'}})}}
+      return {ok:true,status:200,json:async()=>({configured:false,profiles:null,savedAt:null})};
+    })});
+    await settle(context);
+    assert.equal(posts.length,1);
+    assert.equal(posts[0].profiles[8].key,'legacy-key');
+    assert.equal(saved.get('nightfall-profiles-v1').includes('legacy-key'),!ok,ok?'同步成功后移除浏览器明文密钥':'同步失败时保持原样');
+    assert.equal(vm.runInContext('profiles[8].key',context),'legacy-key');
+  }
+});
+
+test('浏览器配置较新时沿用本机服务保存的密钥，不会用空密钥覆盖',async()=>{
+  const now=Date.now(),posts=[];
+  const local=Array.from({length:12},(_,i)=>i===8?{control:'api',endpoint:'https://example.test',model:'new-model',rememberKey:true}:{});
+  const remote=Array.from({length:12},(_,i)=>i===8?{control:'api',endpoint:'https://example.test',model:'old-model',key:'server-key',rememberKey:true}:{});
+  const saved=new Map([['nightfall-profiles-v1',JSON.stringify(local)],['nightfall-profiles-saved-at-v1',new Date(now).toISOString()]]);
+  const {context}=setup(saved,false,true,false,false,{origin:'http://127.0.0.1:4173',fetchImpl:agentConfigFetch(async request=>{
+    if(request.method==='POST'){posts.push(JSON.parse(request.body));return {ok:true,status:200,json:async()=>({configured:true,savedAt:new Date().toISOString()})}}
+    return {ok:true,status:200,json:async()=>({configured:true,profiles:remote,savedAt:new Date(now-60000).toISOString()})};
+  })});
+  await settle(context);
+  assert.equal(vm.runInContext('profiles[8].model',context),'new-model');
+  assert.equal(vm.runInContext('profiles[8].key',context),'server-key');
+  assert.equal(posts.at(-1).profiles[8].key,'server-key');
+  assert.equal(saved.get('nightfall-profiles-v1').includes('server-key'),false);
+});
+
+test('非法头像回退为默认头像，图片地址插入页面前转义',()=>{
+  const {context}=setup();
+  const AVATARS=require('./avatar.js').AVATARS;
+  for(const avatar of ['x" onerror="alert(1)','javascript:alert(1)','data:image/svg+xml;base64,PHN2Zz4=','data:image/png;base64,AA"><script>'])
+    assert.equal(vm.runInContext(`buildProfiles([${JSON.stringify({avatar})}])[0].avatar`,context),AVATARS[0]);
+  const png='data:image/png;base64,iVBORw0KGgo=';
+  assert.equal(vm.runInContext(`buildProfiles([${JSON.stringify({avatar:png})}])[0].avatar`,context),png);
+  assert.match(vm.runInContext(`avatarHTML({name:'<b>',avatar:${JSON.stringify(png)}})`,context),/^<img src="data:image\/png;base64,iVBORw0KGgo=" alt="&lt;b&gt;/);
+  assert.equal(vm.runInContext(`avatarHTML({name:'n',avatar:'x" onerror="alert(1)'})`,context).includes('<img'),false);
 });

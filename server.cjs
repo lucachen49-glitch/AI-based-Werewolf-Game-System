@@ -16,8 +16,10 @@ const types={'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8'
 allowed.add('assets/sfx/wolf-attack-v4.wav');
 for(const name of require('./soundfx.js').names)allowed.add(require('./soundfx.js').source(name));
 Object.values(require('./soundfx.js').musicTracks).forEach(file=>allowed.add(file));
-['agent-request.js','workshop-auto-ui.js','workshop-auto.css','recording-surface.js','story-subtitle-ui.js','recording.js','recording.css','portrait.js','portrait.css','api-wait.js','fullscreen.css','character-intros.js','character-intro-ui.js','character-intro.css','scenario.js','story-player.js','story-game.js','story.css','scenario-settings.html','scenario-settings.css','scenario-settings.js','scenario-review-ui.js','story-art-ui.js','workshop-state.js','workshop-flow.js','workshop-preview.js','workshop-preview-ui.js'].forEach(f=>allowed.add(f));
+['avatar.js','agent-request.js','workshop-auto-ui.js','workshop-auto.css','recording-surface.js','story-subtitle-ui.js','recording.js','recording.css','portrait.js','portrait.css','api-wait.js','fullscreen.css','character-intros.js','character-intro-ui.js','character-intro.css','scenario.js','story-player.js','story-game.js','story.css','scenario-settings.html','scenario-settings.css','scenario-settings.js','scenario-review-ui.js','story-art-ui.js','workshop-state.js','workshop-flow.js','workshop-preview.js','workshop-preview-ui.js'].forEach(f=>allowed.add(f));
 const loopback=new Set(['localhost','127.0.0.1','[::1]']);
+// Main page: AI-generated text is rendered as HTML, so scripts are limited to bundled files.
+const MAIN_PAGE_CSP="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 class ApiError extends Error {
   constructor(status,code,message){super(message);this.status=status;this.code=code;}
@@ -397,6 +399,11 @@ function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetc
     }
     if(!['GET','HEAD'].includes(req.method)){res.writeHead(405,{'Allow':'GET, HEAD'});return res.end('Method not allowed');}
     if(!allowed.has(name)){res.writeHead(404);return res.end('Not found');}
+    if(name==='index.html'){
+      res.setHeader('Content-Security-Policy',MAIN_PAGE_CSP);
+      res.setHeader('Referrer-Policy','no-referrer');
+      res.setHeader('X-Frame-Options','DENY');
+    }
     if(name.startsWith('image-settings.')||name.startsWith('scenario-settings.')){
       res.setHeader('Content-Security-Policy',"default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'none'");
       res.setHeader('Referrer-Policy','no-referrer');

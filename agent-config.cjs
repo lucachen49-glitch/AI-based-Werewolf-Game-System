@@ -4,6 +4,7 @@ const path=require('node:path');
 const os=require('node:os');
 const {randomUUID}=require('node:crypto');
 const {protectSecret}=require('./image-config.cjs');
+const Avatar=require('./avatar.js');
 
 const configPath=path.join(process.env.LOCALAPPDATA||path.join(os.homedir(),'AppData','Local'),'NightfallWerewolf','agent-profiles.json');
 const MAX_BYTES=2*1024*1024;
@@ -18,6 +19,13 @@ function serializedProfiles(value){
   try{serialized=JSON.stringify(value)}catch{throw new AgentConfigError(400,'INVALID_AGENT_CONFIG','Agent 配置格式不正确。')}
   if(Buffer.byteLength(serialized,'utf8')>MAX_BYTES)throw new AgentConfigError(413,'AGENT_CONFIG_TOO_LARGE','Agent 配置文件过大，请缩小自定义头像后重试。');
   return serialized;
+}
+
+function validateAvatars(value){
+  if(!Array.isArray(value))return;
+  for(const profile of value){
+    if(profile&&typeof profile==='object'&&profile.avatar!==undefined&&!Avatar.valid(profile.avatar))throw new AgentConfigError(400,'INVALID_AGENT_AVATAR','头像格式不正确，请选择内置头像或上传 PNG、JPG、WebP 图片。');
+  }
 }
 
 function encryptionFailure(){return new AgentConfigError(500,'AGENT_CONFIG_ENCRYPTION_FAILED','本机配置加密暂不可用，请重试；原有配置没有改变。')}
@@ -46,6 +54,7 @@ function createAgentConfigStore(file=configPath){
     async load(){return load()},
     async save(profiles,{clientSavedAt}={}){
       const serialized=serializedProfiles(profiles);
+      validateAvatars(profiles);
       const current=await readRecord();
       if(current&&typeof clientSavedAt==='string'){
         const requested=Date.parse(clientSavedAt),stored=Date.parse(current.savedAt);
