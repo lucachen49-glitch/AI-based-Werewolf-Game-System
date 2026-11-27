@@ -217,6 +217,7 @@ function renderSceneMotion() {
   node.classList.remove('hidden');
   node.setAttribute('data-effect', sceneMotion.kind);
   if (sceneMotion.kind === 'deal') {
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
     node.innerHTML =
       '<div class="deal-label">命运洗牌中 <small>身份随机分配 · 外观与身份无关</small></div>' +
       game.players
@@ -252,6 +253,7 @@ function renderSceneMotion() {
       });
     }
   } else if (sceneMotion.kind === 'reveal') {
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
     node.innerHTML =
       '<div class="deal-label">' +
       (spectatorPrefs.perspective === 'god' ? '命运揭晓' : '身份已分配') +
@@ -275,6 +277,7 @@ function renderSceneMotion() {
     const [icon, title] = sceneTitles[sceneMotion.kind],
       win = sceneMotion.kind === 'winner';
     node.setAttribute('data-faction', win ? (game.winner === '狼人' ? 'wolf' : 'good') : '');
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
     node.innerHTML =
       '<div class="phase-atmosphere"></div>' +
       (win
@@ -293,9 +296,9 @@ function renderSceneMotion() {
           '</div>'
         : '') +
       '<div class="phase-cinematic"><span>' +
-      icon +
+      esc(icon) +
       '</span><div><small>第 ' +
-      sceneMotion.event.round +
+      esc(sceneMotion.event.round) +
       ' 轮</small><strong>' +
       (win ? esc(game.winner) + '阵营胜利' : esc(title)) +
       '</strong><p>' +
@@ -549,6 +552,7 @@ function renderBubble(reposition = true) {
   node.classList.toggle('hidden', !line);
   if (!line) return;
   node.setAttribute('aria-label', line.id + 1 + ' 号 ' + name(line.id) + '的发言');
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
   node.innerHTML = '<p>' + esc(line.caption || '…') + '</p>';
   if (reposition) positionBubble();
 }
@@ -920,21 +924,29 @@ function renderSpectator() {
   $('railToggle').setAttribute('aria-expanded', String(spectatorPrefs.railOpen));
   $('spectatorRail').classList.toggle('collapsed', !spectatorPrefs.railOpen);
   $('observerRail').classList.toggle('hidden', !spectatorPrefs.railOpen);
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
   $('recordSeat').innerHTML =
     '<option value="all">全部玩家</option>' +
     game.players
       .map(
         (p) =>
-          '<option value="' + p.id + '">' + (p.id + 1) + ' 号 · ' + esc(name(p.id)) + '</option>',
+          '<option value="' +
+          esc(p.id) +
+          '">' +
+          esc(p.id + 1) +
+          ' 号 · ' +
+          esc(name(p.id)) +
+          '</option>',
       )
       .join('');
   $('recordSeat').value = recordSeat;
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic speech is escaped and the remaining markup values are game enums or numeric state.
   $('commentaryList').innerHTML =
     visibleObserverEvents()
       .map(
         (e) =>
           '<article class="record-entry narrator-record"><div><b>旁白</b><small>第 ' +
-          e.round +
+          esc(e.round) +
           ' 轮 · ' +
           esc(e.time) +
           '</small></div><p>' +

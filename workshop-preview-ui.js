@@ -136,6 +136,7 @@ function renderRehearsalConfirmation(d, errors) {
   const blockers = $('rehearsalBlockers');
   if (blockers) {
     const text = issues.map((x) => '<li>' + esc(x) + '</li>').join('');
+    // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
     if (blockers.innerHTML !== text) blockers.innerHTML = text;
   }
   const status = $('rehearsalWatchStatus');
@@ -150,6 +151,7 @@ function renderRehearsalConfirmation(d, errors) {
     const key = P.signature(d.scenes.map((x, i) => (i ? P.transition(d, i) : null)));
     if (list.dataset.version !== key) {
       list.dataset.version = key;
+      // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
       list.innerHTML = d.scenes
         .slice(1)
         .map(
@@ -187,6 +189,7 @@ function previewSceneTools(d) {
       x = d.scenes[i],
       tools = document.createElement('section');
     tools.className = 'rehearsal-tools';
+    // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
     tools.innerHTML = `<p class="hint">请对照人物站位、动作和道具检查衔接。制作使用文字与参考图，实际画面需逐镜预览。</p><div class="continuity-pair"><div><small>前镜结束 · 镜${i}</small><p>${esc(prev.endFrame || '未填结束画面')}</p><small>出场 ${esc((prev.cast || []).join('、'))} · ${esc((prev.dialogues || []).map((l) => l.seat + '号：' + l.text).join(' / '))}</small></div><div><small>本镜开始 · 镜${i + 1}</small><p>${esc(x.startFrame || '未填起始画面')}</p><small>出场 ${esc((x.cast || []).join('、'))} · ${esc(x.description)}</small></div></div>`;
     el.append(tools);
   });
@@ -198,12 +201,13 @@ function fillAssetSelectors() {
   const reuse = rehearsal.reuse || {},
     frames = rehearsal.reuseFrames || {},
     draft = rawDraft();
+  // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
   host.innerHTML =
     '<p class="hint">只复用外观一致的人物定妆照；旧分镜图作为待确认素材。复制不会调用图片模型，原任务保持不变。</p>' +
     draft.characters
       .map(
         (c) =>
-          `<label>${c.seat}号 ${esc(c.name || '人物')} · 定妆照<select data-reuse-character="${c.seat}"><option value="">不复用</option>${assetCatalog
+          `<label>${esc(c.seat)}号 ${esc(c.name || '人物')} · 定妆照<select data-reuse-character="${esc(c.seat)}"><option value="">不复用</option>${assetCatalog
             .filter(
               (a) =>
                 a.kind === 'character' &&
@@ -211,7 +215,7 @@ function fillAssetSelectors() {
                 a.name === c.name &&
                 a.appearance === S.appearance(c),
             )
-            .map((a) => `<option value="${a.id}">${esc(a.label)}</option>`)
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`)
             .join('')}</select></label>`,
       )
       .join('') +
@@ -220,7 +224,7 @@ function fillAssetSelectors() {
         (s, i) =>
           `<label>镜头 ${i + 1} · 分镜图<select data-reuse-frame="${i}"><option value="">不复用</option>${assetCatalog
             .filter((a) => a.kind === 'frame' && a.index === i)
-            .map((a) => `<option value="${a.id}">${esc(a.label)}</option>`)
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`)
             .join('')}</select></label>`,
       )
       .join('');
@@ -241,6 +245,7 @@ function showRehearsal(j) {
     ] || '等待处理') +
     ' · ' +
     j.message;
+  // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
   $('rehearsalProgress').innerHTML = j.scenes
     .map(
       (x, i) =>

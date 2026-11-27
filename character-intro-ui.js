@@ -53,10 +53,11 @@ function introRows(plan, d) {
   $('introEnabled').checked = plan?.enabled === true;
   $('introConfirm').checked = plan?.confirmed === true;
   $('introConfirm').dataset.signature = plan?.confirmation || '';
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic labels, identifiers, and values are escaped with esc() before insertion.
   $('introMarkers').innerHTML = (plan?.markers || [])
     .map(
       (m, i) =>
-        `<div class="intro-row" data-intro-row="${i}"><label>人物<select data-intro="seat">${d.characters.map((c) => `<option value="${c.seat}" ${c.seat === m.seat ? 'selected' : ''}>${c.seat} · ${esc(c.name)}</option>`).join('')}</select></label><label>镜头<select data-intro="scene">${d.scenes.map((x, j) => `<option value="${j}" ${j === m.scene ? 'selected' : ''}>镜头 ${j + 1} / ${x.duration || 10}s</option>`).join('')}</select></label><label>开始秒<input data-intro="start" type="number" min="0" step="0.1" value="${m.start}"></label><label>持续秒<input data-intro="duration" type="number" min="1" max="10" step="0.1" value="${m.duration}"></label><label>位置<select data-intro="position"><option value="left">左下</option><option value="right" ${m.position === 'right' ? 'selected' : ''}>右下</option></select></label><button type="button" data-intro-delete="${i}">删除</button></div>`,
+        `<div class="intro-row" data-intro-row="${i}"><label>人物<select data-intro="seat">${d.characters.map((c) => `<option value="${esc(c.seat)}" ${c.seat === m.seat ? 'selected' : ''}>${esc(c.seat)} · ${esc(c.name)}</option>`).join('')}</select></label><label>镜头<select data-intro="scene">${d.scenes.map((x, j) => `<option value="${j}" ${j === m.scene ? 'selected' : ''}>镜头 ${j + 1} / ${esc(x.duration || 10)}s</option>`).join('')}</select></label><label>开始秒<input data-intro="start" type="number" min="0" step="0.1" value="${esc(m.start)}"></label><label>持续秒<input data-intro="duration" type="number" min="1" max="10" step="0.1" value="${esc(m.duration)}"></label><label>位置<select data-intro="position"><option value="left">左下</option><option value="right" ${m.position === 'right' ? 'selected' : ''}>右下</option></select></label><button type="button" data-intro-delete="${esc(i)}">删除</button></div>`,
     )
     .join('');
 }
@@ -135,12 +136,13 @@ async function introRefreshSources(selectId = '') {
   if (navigation !== introNavigation || current?.id !== storyId) return;
   const prior = introSourceId;
   introJobs = movies.filter((x) => ['ready', 'accepted'].includes(x.status));
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic labels, identifiers, and values are escaped with esc() before insertion.
   $('introSource').innerHTML =
     '<option value="">先生成视频，再选择成片</option>' +
     introJobs
       .map(
         (j) =>
-          `<option value="${j.id}">成片 · v${j.version} · ${j.targetDuration}s${j.status === 'accepted' ? ' · 已采用' : ''}</option>`,
+          `<option value="${esc(j.id)}">成片 · v${esc(j.version)} · ${esc(j.targetDuration)}s${j.status === 'accepted' ? ' · 已采用' : ''}</option>`,
       )
       .join('');
   introSourceId = introJobs.some((x) => x.id === selectId)
@@ -177,12 +179,13 @@ async function introRender(d) {
     ]);
     if (navigation !== introNavigation) return;
     introJobs = movies.filter((x) => ['ready', 'accepted'].includes(x.status));
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic labels, identifiers, and values are escaped with esc() before insertion.
     $('introSource').innerHTML =
       '<option value="">先生成视频，再选择成片</option>' +
       introJobs
         .map(
           (j) =>
-            `<option value="${j.id}">成片 · v${j.version} · ${j.targetDuration}s${j.status === 'accepted' ? ' · 已采用' : ''}</option>`,
+            `<option value="${esc(j.id)}">成片 · v${esc(j.version)} · ${esc(j.targetDuration)}s${j.status === 'accepted' ? ' · 已采用' : ''}</option>`,
         )
         .join('');
     if (introJobs.some((x) => x.id === introSourceId)) $('introSource').value = introSourceId;

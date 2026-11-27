@@ -17,6 +17,7 @@ function subtitleSave() {
   } catch {}
 }
 function subtitleRender() {
+  // eslint-disable-next-line no-unsanitized/property -- Subtitle text, media URLs, and attributes are escaped with esc().
   $('subtitleRows').innerHTML = subtitleCues
     .map(
       (c, i) =>
@@ -27,6 +28,7 @@ function subtitleRender() {
 async function subtitleShowCopies(id) {
   const copies = await api('/api/story-subtitles?sourceId=' + encodeURIComponent(id));
   if (subtitleSource !== id) return;
+  // eslint-disable-next-line no-unsanitized/property -- Subtitle text, media URLs, and attributes are escaped with esc().
   $('subtitleCopies').innerHTML = copies
     .map(
       (c) =>

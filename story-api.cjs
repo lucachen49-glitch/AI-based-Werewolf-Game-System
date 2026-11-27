@@ -1,6 +1,7 @@
 'use strict';
 const AgentRequest = require('./agent-request.js');
 const Limits = require('./limits.js');
+const { assertSameOrigin, assertJSON } = require('./request-guard.cjs');
 const fs = require('node:fs'),
   fsp = require('node:fs/promises');
 const Schema = require('./scenario.js');
@@ -211,11 +212,7 @@ function createStoryAPI({
     res.once('close', close);
     try {
       const origin = 'http://' + req.headers.host;
-      if (
-        req.headers['sec-fetch-site'] === 'cross-site' ||
-        (req.headers.origin && req.headers.origin !== origin) ||
-        (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin)
-      )
+      if (!assertSameOrigin(req, { write: !['GET', 'HEAD'].includes(req.method) }))
         throw new StoryError(403, 'INVALID_ORIGIN', '请从本机游戏页面打开剧本工坊');
       let match;
       if (
@@ -285,7 +282,7 @@ function createStoryAPI({
       }
       let body;
       if (req.method === 'POST') {
-        if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+        if (!assertJSON(req))
           throw new StoryError(415, 'INVALID_CONTENT_TYPE', '请使用剧本工坊保存');
         body = await readJSON(
           req,

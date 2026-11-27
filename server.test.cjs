@@ -537,7 +537,7 @@ test('接口重定向不会携带密钥继续请求其他地址', async (t) => {
 test('原页面静态资源可用，服务端源码与测试不对网页开放', async (t) => {
   const { base } = await fixture(t);
   assert.equal((await fetch(base)).status, 200);
-  for (const file of ['app.js', 'observer.js', 'spectator.js'])
+  for (const file of [...require('./app-manifest.cjs'), 'observer.js', 'spectator.js'])
     assert.equal((await fetch(`${base}/${file}`)).status, 200);
   const workshop = await (await fetch(`${base}/scenario-settings.html`)).text(),
     scripts = [...workshop.matchAll(/<script src="([^"]+)"/g)].map((x) => x[1]);

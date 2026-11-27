@@ -14,12 +14,14 @@ const Limits = require('./limits.js');
 const { randomUUID } = require('node:crypto');
 const { requestAgent, requestAgentWithRetry } = require('./agent-transport.cjs');
 const { createAgentLogger, safeEntry } = require('./agent-log.cjs');
+const { assertSameOrigin, assertJSON } = require('./request-guard.cjs');
 const base = __dirname;
+const APP_SCRIPTS = require('./app-manifest.cjs');
 const allowed = new Set([
   'index.html',
   'styles.css',
   'limits.js',
-  'app.js',
+  ...APP_SCRIPTS,
   'engine.js',
   'voices.js',
   'observer.js',
@@ -402,13 +404,9 @@ async function readUpstream(response, controller) {
 }
 
 function validateChatEnvelope(req, limit) {
-  if (
-    req.headers.origin !== 'http://' + req.headers.host ||
-    req.headers['sec-fetch-site'] === 'cross-site'
-  )
+  if (!assertSameOrigin(req, { write: true }))
     throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址访问页面');
-  if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
-    throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用 JSON 格式发送请求');
+  if (!assertJSON(req)) throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用 JSON 格式发送请求');
   if (Number(req.headers['content-length']) > limit)
     throw new ApiError(
       413,
@@ -756,12 +754,9 @@ async function handleAgentEvent(req, res, agentLogger) {
   try {
     if (req.method !== 'POST')
       throw new ApiError(405, 'METHOD_NOT_ALLOWED', '此接口仅支持 POST 请求');
-    if (
-      req.headers.origin !== `http://${req.headers.host}` ||
-      req.headers['sec-fetch-site'] === 'cross-site'
-    )
+    if (!assertSameOrigin(req, { write: true }))
       throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址访问页面');
-    if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+    if (!assertJSON(req))
       throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用 JSON 格式发送请求');
     const body = await readJSON(req, 4096);
     const codes = new Set([
@@ -855,12 +850,9 @@ async function handleSpeech(req, res, options) {
   req.once('aborted', cancel);
   res.once('close', close);
   try {
-    if (
-      req.headers.origin !== `http://${req.headers.host}` ||
-      req.headers['sec-fetch-site'] === 'cross-site'
-    )
+    if (!assertSameOrigin(req, { write: true }))
       throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址访问页面');
-    if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+    if (!assertJSON(req))
       throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用 JSON 格式发送请求');
     if (Number(req.headers['content-length']) > 32768)
       throw new ApiError(413, 'REQUEST_TOO_LARGE', '语音请求内容过大');
@@ -907,19 +899,14 @@ async function handleSpeech(req, res, options) {
 }
 async function handleImageConfig(req, res, store) {
   try {
-    const sameOrigin = `http://${req.headers.host}`;
-    if (
-      req.headers['sec-fetch-site'] === 'cross-site' ||
-      (req.headers.origin && req.headers.origin !== sameOrigin) ||
-      (req.method === 'POST' && req.headers.origin !== sameOrigin)
-    )
+    if (!assertSameOrigin(req, { write: req.method === 'POST' }))
       throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址打开图片设置。');
     if (req.method === 'GET') return sendJSON(res, 200, await store.status());
     if (req.method !== 'POST') {
       res.setHeader('Allow', 'GET, POST');
       throw new ApiError(405, 'METHOD_NOT_ALLOWED', '此接口仅支持读取和保存图片配置。');
     }
-    if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+    if (!assertJSON(req))
       throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用图片设置页面保存。');
     if (Number(req.headers['content-length']) > 16384)
       throw new ApiError(413, 'REQUEST_TOO_LARGE', '图片配置内容过大。');
@@ -935,12 +922,7 @@ async function handleImageConfig(req, res, store) {
 }
 async function handleAgentConfig(req, res, store) {
   try {
-    const sameOrigin = `http://${req.headers.host}`;
-    if (
-      req.headers['sec-fetch-site'] === 'cross-site' ||
-      (req.headers.origin && req.headers.origin !== sameOrigin) ||
-      (req.method === 'POST' && req.headers.origin !== sameOrigin)
-    )
+    if (!assertSameOrigin(req, { write: req.method === 'POST' }))
       throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址打开 Agent 配置。');
     if (req.method === 'GET') {
       const loaded = await store.load();
@@ -961,7 +943,7 @@ async function handleAgentConfig(req, res, store) {
       res.setHeader('Allow', 'GET, POST');
       throw new ApiError(405, 'METHOD_NOT_ALLOWED', '此接口仅支持读取和保存 Agent 配置。');
     }
-    if (!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || ''))
+    if (!assertJSON(req))
       throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用游戏页面保存 Agent 配置。');
     if (Number(req.headers['content-length']) > AGENT_CONFIG_MAX_BYTES + 16384)
       throw new ApiError(413, 'REQUEST_TOO_LARGE', 'Agent 配置内容过大，请缩小自定义头像后重试。');

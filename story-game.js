@@ -33,12 +33,13 @@ function storyOptions() {
     selectedStoryId = mapped.id;
     rememberStory();
   }
+  // eslint-disable-next-line no-unsanitized/property -- Story identifiers and titles are escaped, with remaining values numeric or boolean.
   $('storyChoice').innerHTML =
     '<option value="">标准狼人杀</option>' +
     list
       .map(
         (s) =>
-          `<option value="${esc(s.id)}">${esc(s.title)} · v${s.version}${s.video ? ' · 已有独立视频' : ' · 可在工坊独立制作'}</option>`,
+          `<option value="${esc(s.id)}">${esc(s.title)} · v${esc(s.version)}${s.video ? ' · 已有独立视频' : ' · 可在工坊独立制作'}</option>`,
       )
       .join('');
   $('storyChoice').value = selectedStoryId;

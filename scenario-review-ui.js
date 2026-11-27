@@ -37,6 +37,7 @@ function renderStoryReview() {
   const dirtyDraft = !current || generationDraftChanged(),
     issues = reviewIssues(),
     agent = typeof agents !== 'undefined' ? agents[Number($('organizer')?.value)] : null;
+  // eslint-disable-next-line no-unsanitized/property -- Issue text is escaped with esc() and the remaining markup is static.
   $('reviewPreflight').innerHTML = issues.length
     ? '<ul>' + issues.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ul>'
     : '<p>本地规则检查通过：镜头时长、角色覆盖、对白负载与制作限制符合配置。</p>';

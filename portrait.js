@@ -68,6 +68,7 @@ function renderPortraitAPIStatus(title, detail) {
 }
 function portraitSetHTML(id, html) {
   const node = $(id);
+  // eslint-disable-next-line no-unsanitized/property -- Callers pass locally composed markup whose dynamic values are escaped with esc().
   if (node && node.innerHTML !== html) node.innerHTML = html;
 }
 function portraitMove(node, parent, before = null) {
@@ -337,9 +338,9 @@ function renderPortrait() {
       'portraitHeroArt',
       art
         ? '<img src="' +
-            Manor.imagePath(art.id) +
+            esc(Manor.imagePath(art.id)) +
             '" data-portrait="' +
-            art.id +
+            esc(art.id) +
             '" alt="' +
             esc(profile.name) +
             '的立绘" draggable="false">'

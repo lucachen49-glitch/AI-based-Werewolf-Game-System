@@ -172,10 +172,11 @@ function renderWorkflow() {
     activeWorkflowStep = NightfallWorkshopFlow.activeIndex(steps);
   const busy = loading || restoring || !workshopReady,
     currentIndex = NightfallWorkshopFlow.activeIndex(steps);
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('workshopSteps').innerHTML = steps
     .map(
       (s, i) =>
-        `<li data-state="${s.status}" data-current="${i === currentIndex}" data-viewing="${i === activeWorkflowStep}" class="${i === activeWorkflowStep ? 'viewing' : ''}"><button type="button" data-workflow-step="${i}" ${!s.accessible || busy ? 'disabled' : ''} aria-current="${i === currentIndex ? 'step' : 'false'}" title="${s.accessible ? (i === currentIndex ? '当前制作步骤；点击可返回查看' : '返回或查看' + s.label) : '完成前序步骤后开放'}"><span>${i + 1} · ${s.label}</span><small class="workflow-state">${labels[s.status] || '待处理'}</small></button></li>`,
+        `<li data-state="${esc(s.status)}" data-current="${i === currentIndex}" data-viewing="${i === activeWorkflowStep}" class="${i === activeWorkflowStep ? 'viewing' : ''}"><button type="button" data-workflow-step="${i}" ${!s.accessible || busy ? 'disabled' : ''} aria-current="${i === currentIndex ? 'step' : 'false'}" title="${s.accessible ? (i === currentIndex ? '当前制作步骤；点击可返回查看' : '返回或查看' + s.label) : '完成前序步骤后开放'}"><span>${i + 1} · ${esc(s.label)}</span><small class="workflow-state">${labels[s.status] || '待处理'}</small></button></li>`,
     )
     .join('');
   const title = (selector, text) => {
@@ -304,12 +305,14 @@ function render(d) {
   $('source').value = d.source;
   $('background').value = d.background;
   $('confirmed').checked = d.confirmed;
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('characters').innerHTML = d.characters
     .map(
       (c) =>
-        `<details open><summary>${c.seat} 号人物</summary><label>姓名<input data-seat="${c.seat}" data-field="name" maxlength="16" value="${esc(c.name)}"></label><label>公开剧情身份<input data-seat="${c.seat}" data-field="publicIdentity" maxlength="40" placeholder="例如：绯夜家族继承人（不填本局游戏身份）" value="${esc(c.publicIdentity || '')}"></label><label>性格<textarea data-seat="${c.seat}" data-field="personality" rows="2" maxlength="400">${esc(c.personality)}</textarea></label><label>公开关系<textarea data-seat="${c.seat}" data-field="relationships" rows="2" maxlength="600">${esc(c.relationships)}</textarea></label>${cinematic ? `<label>参考立绘（制作任务会保存副本）<select data-seat="${c.seat}" data-field="portraitId">${NightfallManor.portraits.map((p) => `<option value="${p.id}" ${(c.portraitId || NightfallManor.defaultId(c.seat - 1)) === p.id ? 'selected' : ''}>${esc(p.name)} · ${esc(p.description)}${p.pending ? ' · 正式立绘待制作' : ''}</option>`).join('')}</select></label><label>人物声音性别<select data-seat="${c.seat}" data-field="gender"><option value="female" ${S.characterGender(c) === 'female' ? 'selected' : ''}>女性</option><option value="male" ${S.characterGender(c) === 'male' ? 'selected' : ''}>男性</option></select></label><label>视频固定音色<select data-seat="${c.seat}" data-field="voiceId">${S.VOICES.map((id) => `<option value="${id}" ${S.voiceId(c) === id ? 'selected' : ''}>${esc(S.voiceLabel(id))}</option>`).join('')}</select><span class="hint">生成前校验男女声；同一角色跨镜头固定音色。只影响新制作，不改变历史视频或游戏发言声音。</span></label><p class="hint" data-voice-hint="${c.seat}"></p><button type="button" data-match-voice="${c.seat}">匹配男女声</button><label>公开外观描述<textarea data-seat="${c.seat}" data-field="appearance" rows="3" maxlength="800">${esc(S.appearance(c))}</textarea></label>` : ''}<label class="private">仅本人知道的秘密<textarea data-seat="${c.seat}" data-field="secret" rows="3" maxlength="800">${esc(c.secret)}</textarea></label></details>`,
+        `<details open><summary>${c.seat} 号人物</summary><label>姓名<input data-seat="${esc(c.seat)}" data-field="name" maxlength="16" value="${esc(c.name)}"></label><label>公开剧情身份<input data-seat="${esc(c.seat)}" data-field="publicIdentity" maxlength="40" placeholder="例如：绯夜家族继承人（不填本局游戏身份）" value="${esc(c.publicIdentity || '')}"></label><label>性格<textarea data-seat="${esc(c.seat)}" data-field="personality" rows="2" maxlength="400">${esc(c.personality)}</textarea></label><label>公开关系<textarea data-seat="${esc(c.seat)}" data-field="relationships" rows="2" maxlength="600">${esc(c.relationships)}</textarea></label>${cinematic ? `<label>参考立绘（制作任务会保存副本）<select data-seat="${esc(c.seat)}" data-field="portraitId">${NightfallManor.portraits.map((p) => `<option value="${esc(p.id)}" ${(c.portraitId || NightfallManor.defaultId(c.seat - 1)) === p.id ? 'selected' : ''}>${esc(p.name)} · ${esc(p.description)}${p.pending ? ' · 正式立绘待制作' : ''}</option>`).join('')}</select></label><label>人物声音性别<select data-seat="${esc(c.seat)}" data-field="gender"><option value="female" ${S.characterGender(c) === 'female' ? 'selected' : ''}>女性</option><option value="male" ${S.characterGender(c) === 'male' ? 'selected' : ''}>男性</option></select></label><label>视频固定音色<select data-seat="${esc(c.seat)}" data-field="voiceId">${S.VOICES.map((id) => `<option value="${id}" ${S.voiceId(c) === id ? 'selected' : ''}>${esc(S.voiceLabel(id))}</option>`).join('')}</select><span class="hint">生成前校验男女声；同一角色跨镜头固定音色。只影响新制作，不改变历史视频或游戏发言声音。</span></label><p class="hint" data-voice-hint="${c.seat}"></p><button type="button" data-match-voice="${c.seat}">匹配男女声</button><label>公开外观描述<textarea data-seat="${esc(c.seat)}" data-field="appearance" rows="3" maxlength="800">${esc(S.appearance(c))}</textarea></label>` : ''}<label class="private">仅本人知道的秘密<textarea data-seat="${esc(c.seat)}" data-field="secret" rows="3" maxlength="800">${esc(c.secret)}</textarea></label></details>`,
     )
     .join('');
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('scenes').innerHTML = d.scenes
     .map((s, i) => {
       const duration = s.duration || 10,
@@ -365,10 +368,11 @@ function renderReferencePreviews() {
         purpose: scene.referencePurposes?.[n] || 'general',
       }),
     }));
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
     box.innerHTML = ordered
       .map(({ n, order, purpose }) => {
         const image = art?.frames?.[n]?.url;
-        return `<div data-reference-item="${n}">${image ? `<a href="${esc(image)}" target="_blank" rel="noopener"><img src="${esc(image)}" alt="镜头 ${n + 1} 参考图"></a>` : `<span>镜头 ${n + 1} 的参考图尚未完成</span>`}<label>顺序 <input type="number" min="1" max="14" data-reference-order value="${order}"></label><label>用途 <select data-reference-purpose>${[
+        return `<div data-reference-item="${esc(n)}">${image ? `<a href="${esc(image)}" target="_blank" rel="noopener"><img src="${esc(image)}" alt="镜头 ${n + 1} 参考图"></a>` : `<span>镜头 ${n + 1} 的参考图尚未完成</span>`}<label>顺序 <input type="number" min="1" max="14" data-reference-order value="${esc(order)}"></label><label>用途 <select data-reference-purpose>${[
           ['general', '综合'],
           ['scene', '场景'],
           ['costume', '服装'],
@@ -677,6 +681,7 @@ function refreshOrganizerAgents() {
     }));
   if (!select) return agents;
   if (agents.length) {
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
     select.innerHTML = agents
       .map(
         (a, i) =>
@@ -693,6 +698,7 @@ function refreshOrganizerAgents() {
 refreshOrganizerAgents();
 async function library(selected = current?.id) {
   const list = (await api('/api/scenarios')).filter((s) => (s.roomSize || 6) === roomSize);
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('library').innerHTML =
     '<option value="">新建剧本</option>' +
     list
@@ -816,6 +822,7 @@ function showJob(j) {
     }[j.stage] || '独立视频任务') +
     ' · ' +
     (j.message || '任务已保存，关闭页面不影响制作。');
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('jobs').innerHTML = j.scenes
     .map(
       (s) =>
@@ -918,12 +925,13 @@ async function loadJobs(entry, keepProgress = false) {
   const [videos, images] = results;
   if (videos.status === 'fulfilled') {
     const jobs = videos.value;
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
     $('videoHistory').innerHTML =
       '<option value="">选择已保存任务</option>' +
       jobs
         .map(
           (j) =>
-            `<option value="${j.id}">v${j.version} · ${['story60-refs-v1', 'cinema-refs-v1'].includes(j.profile) ? '参考图 r' + j.artRevision : '原方案'} · ${j.targetDuration}秒 · ${esc(j.status)}</option>`,
+            `<option value="${esc(j.id)}">v${esc(j.version)} · ${['story60-refs-v1', 'cinema-refs-v1'].includes(j.profile) ? '参考图 r' + esc(j.artRevision) : '原方案'} · ${esc(j.targetDuration)}秒 · ${esc(j.status)}</option>`,
         )
         .join('');
     const latest =
@@ -1598,6 +1606,7 @@ function renderExtraReferences(draft) {
       if (!available.has(r.id))
         available.set(r.id, { id: r.id, label: '已选择的参考素材（正在读取）', kind: r.purpose });
     });
+    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
     select.innerHTML = Array.from(
       available.values(),
       (r) =>
@@ -1605,6 +1614,7 @@ function renderExtraReferences(draft) {
     ).join('');
     renderExtraReferencePreview(i, refs);
   });
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   $('referenceLibraryPreview').innerHTML = rows
     .map(
       (r) =>
@@ -1625,6 +1635,7 @@ function renderExtraReferencePreview(i, initial) {
       fixedLayout: el.querySelector('[data-extra-fixed-layout]')?.value || '',
       allowedMovements: el.querySelector('[data-extra-allowed-movements]')?.value || '',
     }));
+  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
   box.innerHTML = Array.from(select.selectedOptions, (option, n) => {
     const r = referenceCatalog.find((x) => x.id === option.value),
       saved = old.find((x) => x.id === option.value);

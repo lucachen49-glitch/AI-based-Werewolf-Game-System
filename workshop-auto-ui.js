@@ -211,6 +211,7 @@
         apply = $('applyKeyAssets');
       if (apply) apply.hidden = true;
       if (taskAssets.length) {
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         controls.innerHTML =
           '<p class="hint">以下关键场景与道具由系统根据当前剧本自动识别并生成提示词。它们会在人物定妆阶段并列生成和核对，确认后自动用于关联镜头。</p>' +
           taskAssets
@@ -236,6 +237,7 @@
         controls.innerHTML =
           '<p class="hint">尚未生成当前剧本的关键视觉素材清单。点击“开始制作”后，系统会根据公开背景、视觉设定和分镜自动识别需要跨镜保持的场景与道具，并生成提示词。</p>';
       }
+      // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
       list.innerHTML = keyAssets
         .map(
           (item) =>
@@ -374,6 +376,7 @@
               0,
               stages.findIndex((s) => s[0] === j?.stage),
             );
+      // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
       $('autoStages').innerHTML = stages
         .map(
           ([id, label], i) =>
@@ -414,6 +417,7 @@
       if (backfill) {
         if (p.visualAssetsReady === false) {
           backfill.hidden = false;
+          // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
           backfill.innerHTML =
             '<p><b>此历史任务还没有关键视觉素材清单。</b>可以先调用整理 Agent 根据当前公开剧本识别场景和道具并生成提示词。这一步不会生成图片，也不会产生生图费用。</p><button type="button" data-auto-backfill-visual-assets' +
             (pending || j.status === 'running' ? ' disabled' : '') +
@@ -466,6 +470,7 @@
       ]);
       if (signature !== renderKey) {
         renderKey = signature;
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         $('autoReports').innerHTML =
           Object.entries(j.reports)
             .map(
@@ -647,6 +652,7 @@
             )
             .join('');
         if (j.reportHistory?.length)
+          // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
           $('autoReports').innerHTML +=
             '<details><summary>历史检查报告（' +
             j.reportHistory.length +
@@ -675,6 +681,7 @@
               )
               .join('') +
             '</details>';
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         $('autoCharacters').innerHTML = (j.art?.characters || [])
           .map(
             (c, i) =>
@@ -708,6 +715,7 @@
               '</figure>',
           )
           .join('');
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         $('autoVisualAssets').innerHTML = (j.art?.visualAssets || [])
           .map((asset, i) => {
             const kindLabel =
@@ -771,6 +779,7 @@
             );
           })
           .join('');
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         $('autoFrames').innerHTML = (j.art?.frames || [])
           .map(
             (f, i) =>
@@ -836,6 +845,7 @@
               '</article>',
           )
           .join('');
+        // eslint-disable-next-line no-unsanitized/property -- API-provided text and URLs are escaped, with remaining values fixed enums or numeric indices.
         $('autoShots').innerHTML = (j.video?.scenes || [])
           .filter((s) => s.url)
           .map(

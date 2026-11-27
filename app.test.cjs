@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 const Nightfall = require('./engine.js');
+const APP_SCRIPTS = require('./app-manifest.cjs');
 
 // Exercise the real game controller and API adapter; inert elements do not test layout.
 function setup(
@@ -110,7 +111,7 @@ function setup(
     vm.runInContext(fs.readFileSync('portrait.js', 'utf8'), context);
     vm.runInContext('initPortrait=()=>{}', context);
   }
-  vm.runInContext(fs.readFileSync('app.js', 'utf8'), context);
+  for (const file of APP_SCRIPTS) vm.runInContext(fs.readFileSync(file, 'utf8'), context);
   vm.runInContext('presentationDelayScale=0', context);
   if (systemVoices)
     vm.runInContext(

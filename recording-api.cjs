@@ -6,6 +6,7 @@ const { Readable, Transform } = require('node:stream');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { run } = require('./video-media.cjs');
+const { assertSameOrigin } = require('./request-guard.cjs');
 
 const rootDir = path.join(__dirname, 'output', 'recordings');
 const idPattern = /^[a-f0-9-]{36}$/;
@@ -491,11 +492,7 @@ function createRecordingAPI({
     try {
       const sameOrigin = 'http://' + req.headers.host;
       const reading = req.method === 'GET' || req.method === 'HEAD';
-      if (
-        req.headers['sec-fetch-site'] === 'cross-site' ||
-        (req.headers.origin && req.headers.origin !== sameOrigin) ||
-        (!reading && req.headers.origin !== sameOrigin)
-      )
+      if (!assertSameOrigin(req, { write: !reading }))
         throw new RecordingError(403, '请从游戏本机地址打开录制功能。');
       res.setHeader('Cache-Control', 'no-store');
       loaded ??= recover();
