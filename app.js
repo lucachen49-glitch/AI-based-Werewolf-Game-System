@@ -332,7 +332,7 @@ function renderStatus(){
   $('startText').textContent=runError?'重新开局':game.phase==='ended'?'再来一局':game.phase==='lobby'?'开始游戏':paused?'对局已暂停':'自动对局中';
   $('startBtn').disabled=busy||!!connectionBatch||connectionTests>0;
   $('testAllBtn').disabled=busy||!!connectionBatch||connectionTests>0;
-  $('testAllBtn').textContent=connectionBatch?`连接测试 ${connectionBatch.index} / ${connectionBatch.total}${connectionBatch.seat===null?'':` · ${connectionBatch.seat+1} 号`}`:'▷ 批量测试连接';
+  $('testAllBtn').textContent=connectionBatch?`连接测试 ${connectionBatch.index} / ${connectionBatch.total}${connectionBatch.seats.length?` · ${[...connectionBatch.seats].sort((a,b)=>a-b).map(seat=>seat+1).join('、')} 号`:''}`:'▷ 批量测试连接';
   $('testConnection').disabled=busy||!!connectionBatch||connectionTests>0;
   $('saveAgent').disabled=!!connectionBatch||connectionTests>0;
   $('pauseBtn').disabled=!busy||!!speechFailure||!!apiWaiting||!!voteBatch?.errorPause;$('pauseBtn').textContent=paused?'▶ 继续对局':'Ⅱ 暂停';$('pauseBtn').setAttribute('aria-pressed',String(paused));
@@ -424,6 +424,7 @@ function connectionInfo(profile){
   const states={
     ok:{className:'online',label:'连接成功',seatLabel:'API 在线',detail:'最近一次请求成功；测试连接及游戏请求时更新。'},
     error:{className:'offline',label:'连接失败',seatLabel:'API 离线',detail:profile.connectionError||'最近一次请求失败，对局将等待接口恢复后继续。'},
+    slow:{className:'slow',label:'已连通 · 响应较慢',seatLabel:'API 响应慢',detail:profile.connectionError||'接口已连通，但模型在测试时限内未返回结果；对局中可能需要较长等待。'},
     testing:{className:'connecting',label:'连接中…',seatLabel:'API 连接中…',detail:'正在请求此席位配置的模型接口。'},
     queued:{className:'queued',label:'等待测试…',seatLabel:'API 等待测试…',detail:'已加入本轮测试，等待前面的席位完成。'},
     untested:{className:'unknown',label:'尚未测试',seatLabel:'API 未测试',detail:'尚未验证连接，请先到 Agent 配置页测试连接。'}
@@ -437,10 +438,10 @@ function connectionBadge(profile,seat=false){
 }
 function renderConnectionViews(){renderAgents();renderPlayers();renderStatus()}
 function setConnection(profile,state,error=''){profile.connection=state;profile.connectionError=error;if(profiles.includes(profile))renderConnectionViews()}
-function renderAgents(){$('agentCount').textContent=`${size} 个席位`;$('configuredCount').textContent=profiles.slice(0,size).filter(p=>p.control==='api').length;$('agentGrid').innerHTML=profiles.slice(0,size).map((p,i)=>`<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i+1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control==='api'&&p.connection==='error'&&p.connectionError?`<p class="agent-error">${esc(p.connectionError)}${!p.key?'；此席位未填写密钥，请补填并保存。':''}</p>`:''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control==='local'?'规则模拟引擎':p.model||'未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control==='local'?'无需网络':p.endpoint||'未填写')}</strong></div></div>${p.control==='api'?`<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)==='high'?'高（high）':'超高（xhigh）'}</p>`:''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p,i),i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p,i),i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`).join('');}
+function renderAgents(){$('agentCount').textContent=`${size} 个席位`;$('configuredCount').textContent=profiles.slice(0,size).filter(p=>p.control==='api').length;$('agentGrid').innerHTML=profiles.slice(0,size).map((p,i)=>`<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i+1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control==='api'&&['error','slow'].includes(p.connection)&&p.connectionError?`<p class="agent-error${p.connection==='slow'?' agent-slow':''}">${esc(p.connectionError)}${p.connection==='error'&&!p.key?'；此席位未填写密钥，请补填并保存。':''}</p>`:''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control==='local'?'规则模拟引擎':p.model||'未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control==='local'?'无需网络':p.endpoint||'未填写')}</strong></div></div>${p.control==='api'?`<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)==='high'?'高（high）':'超高（xhigh）'}</p>`:''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p,i),i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p,i),i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`).join('');}
 function renderRules(){$('ruleTitle').textContent=BOARDS[ruleSize].title;document.querySelectorAll('.rule-mode').forEach(b=>b.classList.toggle('active',+b.dataset.rule===ruleSize));$('ruleSections').innerHTML=rulesHTML(ruleSize);}
 function switchView(next){if(typeof recordingOpenConfig==='function'&&typeof activeRecording!=='undefined'&&activeRecording){if(next!=='table'){recordingOpenConfig();if(portraitMode)setPortraitMode(false,true)}else recordingCloseConfig()}if(next!=='rules'&&narration?.kind==='rules'&&$('rulesBackdrop').classList.contains('hidden'))stopNarration();view=next;document.querySelectorAll('.content').forEach(x=>x.classList.add('hidden'));$(next+'View').classList.remove('hidden');document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===next));renderSpectator();}
-function reset(nextSize=size){if(speechFailure){const pending=speechFailure;speechFailure=null;pending.resolve('cancel')}if(typeof stopRecording==='function')stopRecording(false);if(typeof recordingConfigPause!=='undefined')recordingConfigPause=null;epoch++;cancelVoteBatch();cancelPreparedSpeech();clearTimeout(agentPending?.timer);agentPending=null;apiWaiting=null;wakeAPIWait();if(typeof resetStory==='function')resetStory();if(connectionBatch)connectionBatch.cancelled=true;stopNarration();resetSpectator();voiceMessage='';$('rulesBackdrop').classList.add('hidden');activeRequest?.abort();releaseWait();busy=false;paused=false;activeSeat=null;actionText='';runError='';autoTask=null;size=nextSize;ruleSize=size;gameId=newGameId();game=new Nightfall.Game(size);logCursor=0;feed=[];transcript=[];addFeed('✦',BOARDS[size].title+' 已就绪。点击开始后随机发牌，全席位自动对局。','notice');renderAll()}
+function reset(nextSize=size){if(speechFailure){const pending=speechFailure;speechFailure=null;pending.resolve('cancel')}if(typeof stopRecording==='function')stopRecording(false);if(typeof recordingConfigPause!=='undefined')recordingConfigPause=null;epoch++;cancelVoteBatch();cancelPreparedSpeech();clearTimeout(agentPending?.timer);agentPending=null;apiWaiting=null;wakeAPIWait();if(typeof resetStory==='function')resetStory();if(connectionBatch)cancelConnectionBatch(connectionBatch);stopNarration();resetSpectator();voiceMessage='';$('rulesBackdrop').classList.add('hidden');activeRequest?.abort();releaseWait();busy=false;paused=false;activeSeat=null;actionText='';runError='';autoTask=null;size=nextSize;ruleSize=size;gameId=newGameId();game=new Nightfall.Game(size);logCursor=0;feed=[];transcript=[];addFeed('✦',BOARDS[size].title+' 已就绪。点击开始后随机发牌，全席位自动对局。','notice');renderAll()}
 function requestReset(nextSize=size){if(busy&&!window.confirm('这会结束当前自动对局，回到准备状态。是否继续？'))return;reset(nextSize)}
 async function start(){
   if(busy||typeof recordingPreparing!=='undefined'&&recordingPreparing)return;
@@ -486,7 +487,7 @@ async function takeTurn(id,task,text,token,extra={},preparation=null){
 }
 function localDecision(id,task,extra={}){const p=game.players[id],c={...game.context(id),checks:game.knowledge[id]||{}};let targets=game.alive().filter(x=>x.id!==id);if(p.role==='狼人'&&task==='night')targets=game.alive();if(p.role==='守卫'&&task==='night')targets=game.alive().filter(x=>x.id!==game.lastGuard);if(game.pk&&task==='vote')targets=targets.filter(x=>game.pk.includes(x.id));const knownWolf=Object.entries(c.checks).find(([target,result])=>result==='狼人'&&game.players[target].alive);let target=knownWolf&&p.role!=='狼人'?+knownWolf[0]:game.pick(targets)?.id??null;if(task==='vote'&&p.role==='狼人'){const nonWolf=targets.filter(x=>x.role!=='狼人');target=game.pick(nonWolf)?.id??target}if(task==='night'&&p.role==='女巫')return {save:extra.victim!==null&&game.potions.save&&(extra.victim!==id||game.round===1),poison:null};if(task==='speech'){const recent=game.speeches.at(-1);const suspicion=target!==null?`${target+1} 号`:'目前的票型';const styles=[`我更关注${suspicion}的发言，理由和结论之间还有空白，想听听你的解释。`,`先别急着跟票。我建议把每个人的判断依据记下来，再对比前后有没有变化。`,`我会重点观察${suspicion}。这只是当前怀疑，不是确定信息，大家独立判断。`,`听完${recent?`${recent.id+1} 号`:'前面玩家'}的分析，我想追问：你的信息来自身份，还是推测？`,`这一轮我倾向于少暴露神职。先把可疑的逻辑说清楚，不要只凭感觉。`,`如果票型过于一致，我反而会小心。狼人也会藏在正确的意见里。`];let text=styles[(id+game.round)%styles.length];if(p.role==='预言家'&&knownWolf)text=`我跳预言家，查验到 ${+knownWolf[0]+1} 号是狼人。我会为这个信息负责。`;return {speech:text}}return {target};}
 function parseAgent(raw){return NightfallAgentRequest.parseActionJSON(raw)}
-async function apiCall(profile,messages,{maxTokens,attempt,allowedTargets,role,nightOptions}={}){
+async function apiCall(profile,messages,{maxTokens,attempt,allowedTargets,role,nightOptions,controller:requestController,seat}={}){
   if(maxTokens===undefined){
     maxTokens=attempt
       ? Limits.ACTION_OUTPUT_MAX_TOKENS
@@ -496,23 +497,25 @@ async function apiCall(profile,messages,{maxTokens,attempt,allowedTargets,role,n
   if(globalThis.location?.protocol==='file:')throw Error('请双击 start-game.cmd 启动游戏，再从 http://127.0.0.1:4173 访问');
   let url;try{url=new URL(profile.endpoint)}catch{throw Object.assign(Error('接口地址格式不正确'),{code:'INVALID_ENDPOINT'})}
   if(url.username||url.password||!(url.protocol==='https:'||(url.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(url.hostname))))throw Object.assign(Error('请使用 HTTPS 或本机 HTTP 接口'),{code:'INVALID_ENDPOINT'});
-  const controller=attempt?.controller||new AbortController();activeRequest=controller;
+  const controller=attempt?.controller||requestController||new AbortController();activeRequest=controller;
   const timer=attempt?null:setTimeout(()=>controller.abort(),Limits.AGENT_BROWSER_TIMEOUT_MS||185000);
   try{
     if(controller.signal.aborted)throw Object.assign(Error('已取消等待'),{name:'AbortError'});
     if(attempt)attempt.sent=true;
     const res=await fetch('/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',redirect:'error',
-      body:JSON.stringify({endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,messages,maxTokens,purpose:attempt?'game-action':'connection-test',...(attempt?{reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),gameId,requestId:attempt.requestId,action:{task:attempt.task,seat:attempt.id+1,round:attempt.round,...(role?{role}:{}),...(['vote','night'].includes(attempt.task)&&Array.isArray(allowedTargets)?{allowedTargets}:{}),...(attempt.task==='night'&&nightOptions?{nightOptions}:{})}}:{})}),signal:controller.signal
+      body:JSON.stringify({endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,messages,maxTokens,purpose:attempt?'game-action':'connection-test',...(attempt?{reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),gameId,requestId:attempt.requestId,action:{task:attempt.task,seat:attempt.id+1,round:attempt.round,...(role?{role}:{}),...(['vote','night'].includes(attempt.task)&&Array.isArray(allowedTargets)?{allowedTargets}:{}),...(attempt.task==='night'&&nightOptions?{nightOptions}:{})}}:{reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),...(Number.isInteger(seat)&&seat>=1&&seat<=12?{seat}:{})})}),signal:controller.signal
     });
     if(attempt)attempt.httpStatus=res.status;
     const data=await res.json().catch(()=>null);
     if(controller.signal.aborted)throw Object.assign(Error('已取消等待'),{name:'AbortError'});
     if(!res.ok){
-      if(data?.error?.message)throw Object.assign(Error(data.error.message),{code:data.error.code,status:res.status});
+      if(data?.error?.message)throw Object.assign(Error(data.error.message),{code:data.error.code,status:res.status,...(data.error.stage?{stage:data.error.stage}:{})});
       if(res.status===404||res.status===405)throw Object.assign(Error('游戏本地服务需要重启，请重新启动游戏并刷新页面'),{code:'ENDPOINT_NOT_FOUND',status:res.status});
       throw Object.assign(Error('游戏服务响应异常（HTTP '+res.status+'），请重试'),{code:'UPSTREAM_ERROR',status:res.status});
     }
+    // Connection tests succeed on the provider's first stream event, without any answer text.
+    if(!attempt&&data?.connection?.ok)return data.connection;
     const choice=data?.choices?.[0];
     if(choice?.finish_reason==='length')throw Object.assign(Error('Agent 输出达到 token 上限，返回内容不完整，请手动重试。'),{code:'AGENT_OUTPUT_TRUNCATED'});
     const content=choice?.message?.content;
@@ -1124,7 +1127,13 @@ function closeModal(){if(narration?.kind==='preview')stopNarration();$('modalBac
 async function testConnection(profile=modalProfile(),updateModal=true){
   if(busy){toast('请在对局结束或重置后测试连接');return false}
   if(connectionTests||connectionBatch&&updateModal){toast('正在测试连接，请等待当前测试完成');return false}
-  const begin=performance.now(),batch=connectionBatch,savedProfile=updateModal?profiles[selectedAgent]:profile,signature=connectionSignature(profile);
+  return runConnectionTest(profile,updateModal,null);
+}
+// Batch tests run several seats at once, so they bypass the single-test guard above.
+async function runConnectionTest(profile,updateModal,batch){
+  const begin=performance.now(),savedProfile=updateModal?profiles[selectedAgent]:profile,signature=connectionSignature(profile);
+  const seat=(updateModal?selectedAgent:profiles.indexOf(profile))+1;
+  const controller=new AbortController();batch?.controllers.add(controller);
   const update=(state,error='')=>{
     profile.connection=state;profile.connectionError=error;
     // A draft only updates a saved card when it tests the exact same API settings.
@@ -1135,7 +1144,7 @@ async function testConnection(profile=modalProfile(),updateModal=true){
   if(updateModal)$('connectionState').textContent='正在请求接口…';
   try{
     if(profile.control!=='api')throw Error('当前选择的是本地模拟，请先切换为 API Agent');
-    await apiCall(profile,[{role:'user',content:'Reply with OK.'}]);
+    await apiCall(profile,[{role:'user',content:'Reply with OK.'}],{controller,seat});
     if(batch?.cancelled){update('untested');return false}
     update('ok');
     const text=`连接成功 · ${Math.round(performance.now()-begin)}ms`;
@@ -1150,36 +1159,57 @@ async function testConnection(profile=modalProfile(),updateModal=true){
       if(updateModal)$('connectionState').textContent=msg;
       return false;
     }
-    update('error',msg);
+    // Headers arrived but the model was slow: the endpoint works, only the wait is long.
+    const slow=e.code==='UPSTREAM_TIMEOUT'&&e.stage==='response';
+    update(slow?'slow':'error',msg);
     if(updateModal)$('connectionState').textContent=msg;
-    if(!batch)toast(`连接失败：${msg}`);
+    if(!batch)toast(slow?`已连通但响应较慢：${msg}`:`连接失败：${msg}`);
     return false;
   }finally{
+    batch?.controllers.delete(controller);
     connectionTests--;
     if(updateModal)lastConnectionTest={signature,connection:profile.connection,connectionError:profile.connectionError};
     renderConnectionViews();
   }
 }
+function cancelConnectionBatch(batch){batch.cancelled=true;for(const controller of batch.controllers)controller.abort()}
+function connectionHost(profile){try{return new URL(profile.endpoint).host.toLowerCase()}catch{return String(profile.endpoint||'')}}
+// Seats with identical API settings share one request; different hosts run in parallel
+// (bounded), while one host's settings are tested in turn to stay clear of rate limits.
 async function testAll(){
   if(busy){toast('请在对局结束或重置后测试连接');return}
   if(connectionBatch||connectionTests){toast('正在测试连接，请等待当前测试完成');return}
   const api=profiles.slice(0,size).filter(p=>p.control==='api');
   if(!api.length){toast('尚未配置 API Agent，本地模拟无需连接');return}
-  const batch={index:0,total:api.length,seat:null,cancelled:false};connectionBatch=batch;let ok=0;
+  const groups=new Map(),lanes=new Map();
+  for(const p of api){
+    const key=connectionSignature(p);
+    if(!groups.has(key)){const group={members:[]};groups.set(key,group);const host=connectionHost(p);if(!lanes.has(host))lanes.set(host,[]);lanes.get(host).push(group)}
+    groups.get(key).members.push(p);
+  }
+  const batch={index:0,total:api.length,seats:[],cancelled:false,controllers:new Set()};connectionBatch=batch;let ok=0,slow=0;
   for(const p of api){p.connection='queued';p.connectionError=''}
   renderConnectionViews();
+  const stopped=()=>batch.cancelled||!!batch.blockedReason;
+  const runGroup=async({members:[lead,...shared]})=>{
+    const seats=[lead,...shared].map(p=>profiles.indexOf(p));
+    batch.index+=seats.length;batch.seats.push(...seats);
+    for(const p of shared){p.connection='testing';p.connectionError=''}
+    const passed=await runConnectionTest(lead,false,batch);
+    for(const p of shared){p.connection=lead.connection;p.connectionError=lead.connectionError}
+    batch.seats=batch.seats.filter(seat=>!seats.includes(seat));
+    if(passed)ok+=seats.length;else if(lead.connection==='slow')slow+=seats.length;
+    renderConnectionViews();
+  };
+  const queue=[...lanes.values()];
+  const worker=async()=>{for(let lane=queue.shift();lane&&!stopped();lane=queue.shift())for(const group of lane){if(stopped())break;await runGroup(group)}};
   try{
-    for(const [index,p]of api.entries()){
-      if(batch.cancelled)break;
-      batch.index=index+1;batch.seat=profiles.indexOf(p);
-      if(await testConnection(p,false))ok++;
-      if(batch.blockedReason)break;
-    }
+    await Promise.all(Array.from({length:Math.min(Limits.AGENT_CONNECTION_CONCURRENCY||3,queue.length)},worker));
   }finally{
     for(const p of api)if(['queued','testing'].includes(p.connection)){p.connection='untested';p.connectionError=''}
     connectionBatch=null;renderConnectionViews();
   }
-  toast(batch.cancelled?'连接测试已停止':batch.blockedReason||`${ok} / ${api.length} 个 API Agent 连接成功`);
+  toast(batch.cancelled?'连接测试已停止':batch.blockedReason||`${ok} / ${api.length} 个 API Agent 连接成功${slow?`，${slow} 个已连通但响应较慢`:''}`);
 }
 
 document.querySelectorAll('.room-option').forEach(b=>b.addEventListener('click',()=>{if(+b.dataset.room!==size)requestReset(+b.dataset.room)}));

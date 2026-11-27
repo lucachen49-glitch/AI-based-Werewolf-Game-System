@@ -103,7 +103,7 @@
 .portrait-seat-connection{display:flex;flex-direction:column;align-items:center;gap:.5cqw;color:#baa98c;font-size:1.9cqw;line-height:1.1;flex:none}
 .portrait-seat-connection>span{writing-mode:vertical-rl;text-orientation:upright;letter-spacing:.08em;white-space:nowrap}
 .portrait-seat-connection i{width:.9cqw;height:.9cqw;border-radius:50%;background:currentColor;flex:none}
-.portrait-seat-connection.online{color:#99c8a3}.portrait-seat-connection.offline{color:#df9a8c}.portrait-seat-connection.connecting,.portrait-seat-connection.queued{color:#e2c078}.portrait-seat-connection.unknown,.portrait-seat-connection.hidden-connection{color:#a99e8c}
+.portrait-seat-connection.online{color:#99c8a3}.portrait-seat-connection.offline{color:#df9a8c}.portrait-seat-connection.connecting,.portrait-seat-connection.queued,.portrait-seat-connection.slow{color:#e2c078}.portrait-seat-connection.unknown,.portrait-seat-connection.hidden-connection{color:#a99e8c}
 .portrait-frame[data-size='12'] .portrait-seat-state{grid-column:2;grid-row:1;justify-self:center;min-width:0;max-height:100%;writing-mode:vertical-rl;text-orientation:upright;white-space:nowrap;letter-spacing:.06em;font-size:2cqw;line-height:1.2;color:#dfc18d}
 .portrait-frame[data-size='12'] .portrait-seat-state:empty{visibility:hidden}
 .portrait-frame[data-size='12'] .portrait-seat.dead .portrait-seat-state{color:var(--cause-color,#c8998d)}
