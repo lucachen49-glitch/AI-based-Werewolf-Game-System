@@ -43,7 +43,7 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
     { role: 'user', content: 'next' },
   ];
   const before = JSON.stringify(messages);
-  for (const effort of ['high', 'xhigh', undefined]) {
+  for (const effort of ['medium', 'high', 'xhigh', undefined]) {
     const body = Agent.responsesBody({
       model: ' model ',
       messages,
@@ -99,8 +99,10 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
   );
 });
 
-test('默认推理强度为 high，输入 token 估算区分中日韩与其他字符', () => {
-  assert.equal(Agent.DEFAULT_REASONING_EFFORT, 'high');
+test('默认推理强度为 medium，输入 token 估算区分中日韩与其他字符', () => {
+  assert.equal(Agent.DEFAULT_REASONING_EFFORT, 'medium');
+  assert.equal(Agent.normalizeReasoningEffort(undefined), 'medium');
+  assert.equal(Agent.normalizeReasoningEffort('invalid'), 'medium');
   assert.equal(Agent.estimateInputTokens('狼人'), 2);
   assert.equal(Agent.estimateInputTokens('abcdefghi'), 3);
   assert.equal(

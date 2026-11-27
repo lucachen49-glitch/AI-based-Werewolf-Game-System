@@ -204,7 +204,7 @@ function initStoryReview() {
           endpoint: agent.endpoint,
           model: agent.model,
           apiKey: agent.rememberKey === false ? '' : agent.key,
-          reasoningEffort: agent.reasoningEffort || 'xhigh',
+          reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
         },
         { timeoutMs: 185000 },
       );
@@ -249,7 +249,7 @@ function initStoryReview() {
         endpoint: agent.endpoint,
         model: agent.model,
         apiKey: agent.rememberKey === false ? '' : agent.key,
-        reasoningEffort: agent.reasoningEffort || 'xhigh',
+        reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
       },
       { timeoutMs: 185000 },
     );

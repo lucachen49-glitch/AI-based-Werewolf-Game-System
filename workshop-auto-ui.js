@@ -86,7 +86,7 @@
         endpoint: a.endpoint,
         model: a.model,
         apiKey: a.key || '',
-        reasoningEffort: a.reasoningEffort || 'xhigh',
+        reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(a.reasoningEffort),
       };
     };
     function itemControls(j, kind, index, item) {

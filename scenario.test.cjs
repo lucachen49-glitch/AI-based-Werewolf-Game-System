@@ -795,7 +795,7 @@ test('剧本HTTP路由来源校验、单席信息、整理独立长输出、静�
   const req = JSON.parse(seen[0].init.body);
   assert.equal(req.model, 'selected-agent');
   assert.equal(req.max_output_tokens, 25000);
-  assert.equal(req.reasoning.effort, 'high');
+  assert.equal(req.reasoning.effort, 'medium');
   assert.equal(req.temperature, undefined);
   assert.equal(seen[0].init.headers.Authorization, 'Bearer only-chat-test-key');
   assert.doesNotMatch(await fileText(f.root), /only-chat-test-key/);

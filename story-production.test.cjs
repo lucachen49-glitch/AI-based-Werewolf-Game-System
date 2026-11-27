@@ -938,6 +938,11 @@ test('检查结果卡片逐条展示意见，点击整改时传递对应报告�
   };
   const posted = [];
   const sandbox = {
+    NightfallAgentRequest: {
+      normalizeReasoningEffort(value) {
+        return ['medium', 'high', 'xhigh'].includes(value) ? value : 'medium';
+      },
+    },
     document: { getElementById: node, addEventListener() {} },
     setInterval() {},
     confirm() {

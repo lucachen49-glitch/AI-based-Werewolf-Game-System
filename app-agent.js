@@ -93,10 +93,13 @@ function reset(nextSize = size) {
   wakeAPIWait();
   if (typeof resetStory === 'function') resetStory();
   if (connectionBatch) connectionBatch.cancelled = true;
+  if (connectionBatch?.controllers)
+    for (const controller of connectionBatch.controllers) controller.abort();
   stopNarration();
   resetSpectator();
   voiceMessage = '';
   $('rulesBackdrop').classList.add('hidden');
+  for (const controller of activeRequestControllers) controller.abort();
   activeRequest?.abort();
   releaseWait();
   busy = false;
@@ -312,7 +315,7 @@ function parseAgent(raw) {
 async function apiCall(
   profile,
   messages,
-  { maxTokens, attempt, allowedTargets, role, nightOptions } = {},
+  { maxTokens, attempt, allowedTargets, role, nightOptions, requestController } = {},
 ) {
   if (maxTokens === undefined) {
     maxTokens = attempt
@@ -338,7 +341,8 @@ async function apiCall(
     )
   )
     throw Object.assign(Error('请使用 HTTPS 或本机 HTTP 接口'), { code: 'INVALID_ENDPOINT' });
-  const controller = attempt?.controller || new AbortController();
+  const controller = attempt?.controller || requestController || new AbortController();
+  activeRequestControllers.add(controller);
   activeRequest = controller;
   const timer = attempt
     ? null
@@ -422,7 +426,9 @@ async function apiCall(
     throw error;
   } finally {
     clearTimeout(timer);
-    if (activeRequest === controller) activeRequest = null;
+    activeRequestControllers.delete(controller);
+    if (activeRequest === controller)
+      activeRequest = [...activeRequestControllers].at(-1) || null;
   }
 }
 

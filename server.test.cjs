@@ -642,7 +642,7 @@ test('6/12 人自然讲解 MP3 可播放下载及 HEAD 查询，制作脚本和�
 test('推理强度缺省和显式值按配置转发，其他值在提交前拒绝', async (t) => {
   const { post, seen } = await fixture(t);
   for (const [body, expected] of [
-    [{ purpose: 'game-action' }, 'high'],
+    [{ purpose: 'game-action' }, 'medium'],
     [{ purpose: 'game-action', reasoningEffort: 'xhigh' }, 'xhigh'],
     [{ purpose: 'game-action', reasoningEffort: 'high' }, 'high'],
     [{ purpose: 'game-action', reasoningEffort: 'medium' }, 'medium'],

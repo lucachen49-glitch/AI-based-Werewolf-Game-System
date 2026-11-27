@@ -87,7 +87,8 @@ let game = new Nightfall.Game(6),
 let feed = [],
   transcript = [],
   toastTimer,
-  activeRequest = null;
+  activeRequest = null,
+  activeRequestControllers = new Set();
 let paused = false,
   activeSeat = null,
   actionText = '',

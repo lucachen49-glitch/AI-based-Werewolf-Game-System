@@ -74,7 +74,7 @@ test('审阅只向指定 Agent 发送剧本，秘密不进入报告，确认绑�
     new AbortController().signal,
   );
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].body.reasoning.effort, 'high');
+  assert.equal(sent[0].body.reasoning.effort, 'medium');
   assert.equal(sent[0].body.temperature, undefined);
   assert.equal(sent[0].body.max_output_tokens, 25000);
   assert.equal(sent[0].url, 'https://chosen-agent.test/chat');
@@ -83,7 +83,7 @@ test('审阅只向指定 Agent 发送剧本，秘密不进入报告，确认绑�
   assert.equal(JSON.stringify(result).includes(story.characters[0].secret), false);
   assert.equal(result.protocol, 'responses');
   assert.equal(result.maxOutputTokens, 25000);
-  assert.equal(result.reasoningEffort, 'high');
+  assert.equal(result.reasoningEffort, 'medium');
   await assert.rejects(() => reviews.requireApproved(saved.id, saved.version), {
     code: 'STORY_REVIEW_REQUIRED',
   });
@@ -173,7 +173,7 @@ test('AI按核对建议生成合法未保存修订稿，保留原稿、角色配
     new AbortController().signal,
   );
   assert.equal(sent.length, 2);
-  assert.equal(sent[1].body.reasoning.effort, 'high');
+  assert.equal(sent[1].body.reasoning.effort, 'medium');
   assert.equal(sent[1].body.temperature, undefined);
   assert.equal(sent[1].body.max_output_tokens, 25000);
   assert.equal(sent[1].authorization, 'Bearer one-time-key');

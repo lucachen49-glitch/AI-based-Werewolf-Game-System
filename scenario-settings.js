@@ -1214,7 +1214,7 @@ $('prepare').onclick = guard(async () => {
     endpoint: agent.endpoint,
     model: agent.model,
     apiKey: agent.key,
-    reasoningEffort: agent.reasoningEffort || 'xhigh',
+    reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
   });
   render(r.draft);
   dirty = true;

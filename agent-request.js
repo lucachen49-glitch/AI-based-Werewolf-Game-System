@@ -5,7 +5,7 @@
 })(globalThis, () => {
   const PROTOCOL = 'responses';
   const OUTPUT_MAX_TOKENS = 25000;
-  const DEFAULT_REASONING_EFFORT = 'high';
+  const DEFAULT_REASONING_EFFORT = 'medium';
   const SUPPORTED_REASONING_EFFORTS = ['medium', 'high', 'xhigh'];
   function normalizeReasoningEffort(value) {
     return SUPPORTED_REASONING_EFFORTS.includes(value) ? value : DEFAULT_REASONING_EFFORT;

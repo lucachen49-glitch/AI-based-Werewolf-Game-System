@@ -1598,24 +1598,25 @@ test('批量测试失败保留每席位原因，未填写密钥显示补填提�
   assert.equal(saved.get('nightfall-profiles-v1').includes('connectionError'), false);
 });
 
-test('批量测试即时排队、逐席位加载与结果同步，重复操作不会启动新请求', async () => {
+test('批量连接测试最多两路并发、排队补位并同步结果，重复操作不会启动新请求', async () => {
   const { context } = setup();
   const pending = [];
   vm.runInContext(
-    "reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]};profiles[8].control='local';profiles[0].connection='ok';profiles[2].connection='error';profiles[2].connectionError='旧错误'",
+    "reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]};profiles[4]={...profiles[8]};profiles[8].control='local';profiles[0].connection='ok';profiles[2].connection='error';profiles[2].connectionError='旧错误'",
     context,
   );
   context.fetch = async () => new Promise((resolve) => pending.push(resolve));
   const run = vm.runInContext('testAll()', context);
+  assert.equal(pending.length, 2);
   assert.deepEqual(
-    Array.from(vm.runInContext('profiles.slice(0,3).map(p=>connectionInfo(p).state)', context)),
-    ['testing', 'local', 'queued'],
+    Array.from(vm.runInContext('profiles.slice(0,5).map(p=>connectionInfo(p).state)', context)),
+    ['testing', 'local', 'testing', 'local', 'queued'],
   );
   assert.match(vm.runInContext("$('agentGrid').innerHTML", context), /连接中…/);
   assert.match(vm.runInContext("$('agentGrid').innerHTML", context), /等待测试…/);
   assert.doesNotMatch(vm.runInContext("$('agentGrid').innerHTML", context), /旧错误/);
   assert.match(vm.runInContext("$('playersGrid').innerHTML", context), /API 连接中…/);
-  assert.match(vm.runInContext("$('testAllBtn').textContent", context), /1 \/ 2 · 1 号/);
+  assert.match(vm.runInContext("$('testAllBtn').textContent", context), /0 \/ 3 · (1、3|3、1) 号/);
   assert.equal(
     vm.runInContext(
       "$('startBtn').disabled&&$('testAllBtn').disabled&&$('saveAgent').disabled",
@@ -1624,23 +1625,27 @@ test('批量测试即时排队、逐席位加载与结果同步，重复操作�
     true,
   );
   await vm.runInContext('testAll();testConnection(profiles[0],false);start()', context);
-  assert.equal(pending.length, 1);
+  assert.equal(pending.length, 2);
   assert.equal(vm.runInContext('game.phase', context), 'lobby');
   pending[0]({ ok: true, json: async () => ({ choices: [{ message: { content: 'OK' } }] }) });
-  await until(() => pending.length === 2);
+  await until(() => pending.length === 3);
   assert.equal(vm.runInContext('profiles[0].connection', context), 'ok');
-  assert.equal(vm.runInContext('profiles[2].connection', context), 'testing');
+  assert.equal(vm.runInContext('profiles[4].connection', context), 'testing');
   assert.match(vm.runInContext("$('playersGrid').innerHTML", context), /API 在线/);
-  assert.match(vm.runInContext("$('testAllBtn').textContent", context), /2 \/ 2 · 3 号/);
+  assert.match(vm.runInContext("$('testAllBtn').textContent", context), /1 \/ 3/);
   pending[1]({
     ok: false,
     status: 401,
     json: async () => ({ error: { message: 'API Key 无效' } }),
   });
+  pending[2]({ ok: true, json: async () => ({ choices: [{ message: { content: 'OK' } }] }) });
   await run;
   assert.equal(vm.runInContext('profiles[2].connection', context), 'error');
+  assert.equal(vm.runInContext('profiles[4].connection', context), 'ok');
   assert.match(vm.runInContext("$('playersGrid').innerHTML", context), /API 离线/);
-  assert.match(vm.runInContext("$('toast').textContent", context), /1 \/ 2 个 API Agent 连接成功/);
+  assert.match(vm.runInContext("$('toast').textContent", context), /2 \/ 3 个 API Agent 连接成功/);
+  assert.equal(vm.runInContext('connectionTests', context), 0);
+  assert.equal(vm.runInContext('activeRequestControllers.size', context), 0);
   assert.equal(vm.runInContext("$('startBtn').disabled||$('testAllBtn').disabled", context), false);
   context.fetch = async () => ({
     ok: true,
@@ -1650,10 +1655,10 @@ test('批量测试即时排队、逐席位加载与结果同步，重复操作�
   assert.equal(vm.runInContext('profiles[2].connection', context), 'ok');
 });
 
-test('服务端仍有对局请求时批量连接测试停止并显示明确提示', async () => {
+test('服务端仍有对局请求时停止批量连接并取消在途席位', async () => {
   const { context } = setup();
   let requests = 0;
-  vm.runInContext('reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]}', context);
+  vm.runInContext('reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]};profiles[4]={...profiles[8]}', context);
   context.fetch = async () => {
     requests++;
     return {
@@ -1668,29 +1673,41 @@ test('服务端仍有对局请求时批量连接测试停止并显示明确提�
     };
   };
   await vm.runInContext('testAll()', context);
-  assert.equal(requests, 1);
+  assert.equal(requests, 2);
   assert.match(vm.runInContext("$('toast').textContent", context), /等待本局请求完成/);
-  assert.equal(vm.runInContext('profiles[2].connection', context), 'untested');
+  assert.equal(vm.runInContext('profiles[4].connection', context), 'untested');
   assert.equal(vm.runInContext('connectionBatch', context), null);
+  assert.equal(vm.runInContext('connectionTests', context), 0);
+  assert.equal(vm.runInContext('activeRequestControllers.size', context), 0);
 });
 
-test('批量测试重置取消后不遗留加载状态，不再请求排队席位', async () => {
+test('批量测试重置会取消两路在途请求，不遗留加载状态且不再请求排队席位', async () => {
   const { context } = setup();
-  let requests = 0;
-  vm.runInContext('reset(12);profiles[0]={...profiles[8]}', context);
+  let requests = 0,
+    aborted = 0;
+  vm.runInContext('reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]};profiles[4]={...profiles[8]}', context);
   context.fetch = async (url, { signal }) => {
     requests++;
     return new Promise((resolve, reject) =>
-      signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), {
-        once: true,
-      }),
+      signal.addEventListener(
+        'abort',
+        () => {
+          aborted++;
+          reject(new DOMException('Cancelled', 'AbortError'));
+        },
+        { once: true },
+      ),
     );
   };
   const run = vm.runInContext('testAll()', context);
+  assert.equal(requests, 2);
   vm.runInContext('reset(6)', context);
   await run;
-  assert.equal(requests, 1);
+  assert.equal(aborted, 2);
+  assert.equal(requests, 2);
   assert.equal(vm.runInContext('connectionBatch', context), null);
+  assert.equal(vm.runInContext('connectionTests', context), 0);
+  assert.equal(vm.runInContext('activeRequestControllers.size', context), 0);
   assert.equal(
     vm.runInContext('profiles.some(p=>["testing","queued"].includes(p.connection))', context),
     false,

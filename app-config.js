@@ -495,19 +495,26 @@ function closeModal() {
   lastFocus?.focus();
 }
 
-async function testConnection(profile = modalProfile(), updateModal = true) {
+async function testConnection(profile = modalProfile(), updateModal = true, batchRequest = false) {
   if (busy) {
     toast('请在对局结束或重置后测试连接');
     return false;
   }
-  if (connectionTests || (connectionBatch && updateModal)) {
+  if ((connectionTests && !batchRequest) || (connectionBatch && updateModal)) {
     toast('正在测试连接，请等待当前测试完成');
     return false;
   }
   const begin = performance.now(),
-    batch = connectionBatch,
+    batch = batchRequest ? connectionBatch : null,
+    seat = profiles.indexOf(profile),
     savedProfile = updateModal ? profiles[selectedAgent] : profile,
-    signature = connectionSignature(profile);
+    signature = connectionSignature(profile),
+    requestController = batch ? new AbortController() : null;
+  if (batch) {
+    batch.controllers.add(requestController);
+    batch.activeSeats.add(seat);
+    batch.seat = seat;
+  }
   const update = (state, error = '') => {
     profile.connection = state;
     profile.connectionError = error;
@@ -527,8 +534,10 @@ async function testConnection(profile = modalProfile(), updateModal = true) {
   if (updateModal) $('connectionState').textContent = '正在请求接口…';
   try {
     if (profile.control !== 'api') throw Error('当前选择的是本地模拟，请先切换为 API Agent');
-    await apiCall(profile, [{ role: 'user', content: 'Reply with OK.' }]);
-    if (batch?.cancelled) {
+    await apiCall(profile, [{ role: 'user', content: 'Reply with OK.' }], {
+      requestController,
+    });
+    if (batch?.cancelled || batch?.blockedReason) {
       update('untested');
       return false;
     }
@@ -538,13 +547,15 @@ async function testConnection(profile = modalProfile(), updateModal = true) {
     if (!batch) toast(text);
     return true;
   } catch (e) {
-    if (batch?.cancelled) {
+    if (batch?.cancelled || batch?.blockedReason) {
       update('untested');
       return false;
     }
     const msg = e.name === 'AbortError' ? '请求超时或已取消' : e.message;
     if (batch && e.code === 'GAME_REQUESTS_ACTIVE') {
       batch.blockedReason = msg;
+      for (const controller of batch.controllers)
+        if (controller !== requestController) controller.abort();
       update('untested', msg);
       if (updateModal) $('connectionState').textContent = msg;
       return false;
@@ -555,6 +566,12 @@ async function testConnection(profile = modalProfile(), updateModal = true) {
     return false;
   } finally {
     connectionTests--;
+    if (batch) {
+      batch.controllers.delete(requestController);
+      batch.activeSeats.delete(seat);
+      batch.completed++;
+      batch.seat = batch.activeSeats.values().next().value ?? null;
+    }
     if (updateModal)
       lastConnectionTest = {
         signature,
@@ -579,7 +596,16 @@ async function testAll() {
     toast('尚未配置 API Agent，本地模拟无需连接');
     return;
   }
-  const batch = { index: 0, total: api.length, seat: null, cancelled: false };
+  const batch = {
+    completed: 0,
+    total: api.length,
+    seat: null,
+    activeSeats: new Set(),
+    controllers: new Set(),
+    nextIndex: 0,
+    cancelled: false,
+    blockedReason: '',
+  };
   connectionBatch = batch;
   let ok = 0;
   for (const p of api) {
@@ -588,13 +614,14 @@ async function testAll() {
   }
   renderConnectionViews();
   try {
-    for (const [index, p] of api.entries()) {
-      if (batch.cancelled) break;
-      batch.index = index + 1;
-      batch.seat = profiles.indexOf(p);
-      if (await testConnection(p, false)) ok++;
-      if (batch.blockedReason) break;
+    async function worker() {
+      while (!batch.cancelled && !batch.blockedReason) {
+        const index = batch.nextIndex++;
+        if (index >= api.length) return;
+        if (await testConnection(api[index], false, true)) ok++;
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(2, api.length) }, () => worker()));
   } finally {
     for (const p of api)
       if (['queued', 'testing'].includes(p.connection)) {
