@@ -1,6 +1,8 @@
 'use strict';
-const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
-const {createMediaTools,run,inspect}=require('./video-media.cjs');
+const {test:nodeTest}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
+const {createMediaTools,ffmpegPath,run,inspect}=require('./video-media.cjs');
+let mediaAvailability;
+function test(name,fn){nodeTest(name,async t=>{mediaAvailability??=createMediaTools().available();if(!await mediaAvailability){t.skip('ffmpeg is unavailable. Install it or set NIGHTFALL_FFMPEG to run media integration tests.');return;}await fn(t);});}
 
 test('真实姓名条合成保留音轨和片长，中文字幕可渲染',async t=>{
  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'nightfall-title-media-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));const input=path.join(dir,'source.mp4'),output=path.join(dir,'copy.mp4');
@@ -19,7 +21,7 @@ test('电影真实合成：变长镜头、原生对白时段、旁白分离及�
   await media.assemble(dir,job);const output=path.join(dir,'intro.mp4'),info=await inspect(output);assert.equal(info.audio,true);assert.equal(info.video,true);assert.ok(Math.abs(info.duration-7)<=.1);
   // Isolate the synthetic native dialogue frequency: it must be gated during narration.
   const {spawn}=require('node:child_process');
-  const binaries=await fs.readdir(path.join(__dirname,'.video-venv/Lib/site-packages/imageio_ffmpeg/binaries')),exe=path.join(__dirname,'.video-venv/Lib/site-packages/imageio_ffmpeg/binaries',binaries.find(x=>/^ffmpeg.*\.exe$/.test(x)));
+  const exe=await ffmpegPath();
   async function rms(start){return new Promise((resolve,reject)=>{const p=spawn(exe,['-v','error','-ss',String(start),'-i',output,'-t','0.4','-vn','-af','highpass=f=1400,lowpass=f=1600','-ar','8000','-ac','1','-f','f32le','pipe:1'],{windowsHide:true});const chunks=[];p.stdout.on('data',x=>chunks.push(x));p.on('error',reject);p.on('close',code=>{if(code)return reject(Error('audio inspection'));const b=Buffer.concat(chunks);let sum=0;for(let i=0;i+4<=b.length;i+=4)sum+=b.readFloatLE(i)**2;resolve(Math.sqrt(sum/(b.length/4)))})})}
   const quiet=await rms(1.2),spoken=await rms(2.3),second=await rms(4);assert.ok(spoken>quiet*8,{quiet,spoken});assert.ok(second>quiet*8,{quiet,second});
   const changed={...job,scenes:job.scenes.map((s,i)=>i?s:{...s,narrationSeconds:1})};await media.prepareNarration(dir,changed);assert.equal(requests,2,'changing the reserved narration window invalidates cached timing');

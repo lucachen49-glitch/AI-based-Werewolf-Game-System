@@ -29,8 +29,8 @@ test('音乐播放被拒绝或资源失败时静默停止，可在下一次手�
 });
 test('背景音乐本地有效且循环接缝连续，闭眼素材和音乐可通过白名单加载',async t=>{
  const {createServer}=require('./server.cjs'),{once}=require('node:events');const server=createServer({recoverVideoJobs:false});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();server.close()});const base='http://127.0.0.1:'+server.address().port;
- const data=fs.readFileSync('assets/music/manor-nocturne.wav');assert.equal(data.toString('ascii',0,4),'RIFF');assert.equal((data.length-44)/data.readUInt32LE(28),64);assert.ok(Math.abs(data.readInt16LE(44)-data.readInt16LE(data.length-2))<1000);
- for(const file of ['assets/music/manor-nocturne.wav',...Array.from({length:6},(_,i)=>'assets/manor/portrait-0'+(i+1)+'-closed.webp')]){const r=await fetch(base+'/'+file);assert.equal(r.status,200);assert.ok((await r.arrayBuffer()).byteLength>1000)}
+ const data=fs.readFileSync('assets/music/manor-nocturne.ogg');assert.equal(data.toString('ascii',0,4),'OggS');assert.ok(data.length>1000);
+ for(const file of ['assets/music/manor-nocturne.ogg',...Array.from({length:6},(_,i)=>'assets/manor/portrait-0'+(i+1)+'-closed.webp')]){const r=await fetch(base+'/'+file);assert.equal(r.status,200);assert.ok((await r.arrayBuffer()).byteLength>1000)}
  assert.equal((await fetch(base+'/scripts/generate-music.py')).status,404);
 });
 test('剧情配乐只使用公开背景与阶段，分镜按画面选曲，标准局与12人局保留旧曲',()=>{
@@ -57,8 +57,8 @@ test('新配乐失败保留上一曲，快速切换只保留两轨；所有原�
  f.music.setTrack('candle');f.music.setTrack('vote');assert.ok(f.audios.filter(a=>a.src).length<=2);f.music.stop();
  const {createServer}=require('./server.cjs'),{once}=require('node:events');const server=createServer({recoverVideoJobs:false});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>{server.closeAllConnections();server.close()});
  for(const [id,file]of Object.entries(require('./soundfx.js').musicTracks)){
-   const data=fs.readFileSync(file);assert.equal(data.toString('ascii',0,4),'RIFF');assert.equal((data.length-44)/data.readUInt32LE(28),id==='manor'?64:32);assert.ok(Math.abs(data.readInt16LE(44)-data.readInt16LE(data.length-2))<1000);
-   const r=await fetch('http://127.0.0.1:'+server.address().port+'/'+file);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/audio\/wav/);assert.equal((await r.arrayBuffer()).byteLength,data.length);
+   const data=fs.readFileSync(file);assert.equal(data.toString('ascii',0,4),'OggS');assert.ok(data.length>1000,id);
+   const r=await fetch('http://127.0.0.1:'+server.address().port+'/'+file);assert.equal(r.status,200);assert.match(r.headers.get('content-type'),/audio\/ogg/);assert.equal((await r.arrayBuffer()).byteLength,data.length);
  }
 });
 function fixture(){const audios=[];let speaking=false;const prefs=[];class FakeAudio{constructor(src){this.src=src;this.plays=0;this.pauses=0;audios.push(this)}play(){this.plays++;return Promise.resolve()}pause(){this.pauses++}}

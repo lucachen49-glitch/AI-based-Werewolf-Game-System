@@ -2,7 +2,7 @@
   'use strict';
   const names=['shuffle','deal','flip','night','wolf','guard','seer','save','poison','vote','exile','hunter','good-win','wolf-win'];
   const source=name=>'assets/sfx/'+name+'-bell-v1.wav';
-  const musicTracks={manor:'assets/music/manor-nocturne.wav',snow:'assets/music/snow-arrival.wav',candle:'assets/music/candle-intrigue.wav',night:'assets/music/bloodmoon-night.wav',vote:'assets/music/verdict-pulse.wav',dawn:'assets/music/dawn-accord.wav'};
+  const musicTracks={manor:'assets/music/manor-nocturne.ogg',snow:'assets/music/snow-arrival.ogg',candle:'assets/music/candle-intrigue.ogg',night:'assets/music/bloodmoon-night.ogg',vote:'assets/music/verdict-pulse.ogg',dawn:'assets/music/dawn-accord.ogg'};
   // Only public setting, current picture and public phase affect music, never roles or targets.
   function storyMusic({size=6,story,phase='lobby',scene}={}){
     if(!story||(story.roomSize||6)!==size)return 'manor';

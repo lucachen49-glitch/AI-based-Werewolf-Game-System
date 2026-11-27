@@ -10,5 +10,5 @@ Composed and synthesized locally by scripts/generate-story-music.py.
 32-second seamless loops, 22050 Hz, 16-bit mono PCM.
 Shared D-minor harmony permits gentle transitions; no borrowed recordings,
 samples, external music services or runtime generation. May be distributed
-with this project. Existing manor-nocturne.wav and accepted sound effects
-remain intact.
+with this project. The Ogg Vorbis releases are included with the project. Original WAV
+masters are archived outside the source repository.

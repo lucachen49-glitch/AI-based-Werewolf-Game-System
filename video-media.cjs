@@ -122,4 +122,4 @@ function createMediaTools({synthesize=speechAudio}={}){return {
   }
 }}
 const mediaTools=createMediaTools();
-module.exports={mediaTools,createMediaTools,inspect,run};
+module.exports={mediaTools,createMediaTools,ffmpegPath,inspect,run};

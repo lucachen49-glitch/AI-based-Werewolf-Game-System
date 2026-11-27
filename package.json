@@ -5,7 +5,7 @@
   "description": "夜幕之下 — 6/12 人 AI 狼人杀",
   "scripts": {
     "start": "node server.cjs",
-    "test": "node --test agent-request.test.cjs system-logs.test.cjs recording.test.cjs service-manager.test.cjs story-production.test.cjs story-key-assets.test.cjs engine.test.cjs app.test.cjs server.test.cjs voice.test.cjs image-config.test.cjs audiovisual.test.cjs scenario.test.cjs scenario-review.test.cjs story-art.test.cjs workshop-state.test.cjs workshop-flow.test.cjs upgrade.test.cjs cinema.test.cjs workshop-preview.test.cjs character-intros.test.cjs hardening.test.cjs",
+    "test": "node scripts/run-tests.cjs",
     "test:media": "node --test video-media.test.cjs"
   }
 }
