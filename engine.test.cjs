@@ -17,7 +17,7 @@ function settleAll(game,shoot=()=>null){
 }
 
 function finishLastWords(game){
-  while(game.phase==='lastWords')game.addLastWord(game.lastWordsQueue[0],'最后陈述');
+  while(game.phase==='lastWords'&&game.lastWordsQueue.length)game.addLastWord(game.lastWordsQueue[0],'最后陈述');
   if(game.phase==='lastWords')game.finishLastWords();
 }
 
@@ -90,8 +90,11 @@ test('狼刀两轮先看是否一致，再按多数与随机平票定刀',()=>{
   const game=fixed();
   assert.deepEqual(game.wolfConsensus({0:{target:4},1:{target:4}}),{unanimous:true,target:4});
   assert.deepEqual(game.wolfConsensus({0:{target:4},1:{target:5}}),{unanimous:false,target:null});
+  assert.deepEqual(game.wolfConsensus({0:{target:4},1:{target:99}}),{unanimous:false,target:null});
   assert.equal(game.wolfTarget({0:{target:4},1:{target:5}}),4);
-  assert.equal(game.wolfTarget({0:{target:4},1:{target:4}}),4);
+  let randomCalls=0;const majority=fixed(6,()=>{randomCalls++;return .99});randomCalls=0;
+  assert.equal(majority.wolfTarget({0:{target:4},1:{target:4}}),4);
+  assert.equal(randomCalls,0);
   const randomTie=fixed(6,()=>.99);
   assert.equal(randomTie.wolfTarget({0:{target:4},1:{target:5}}),5);
 });
@@ -127,11 +130,12 @@ test('猎人统一结算，不开枪时不产生公开消息，狼刀出局可�
   assert.equal(skipped.phase,'lastWords');
   finishLastWords(skipped);
   assert.equal(skipped.phase,'discussion');
-  assert.equal(skipped.logs.some(entry=>/猎人.*(放弃|选择是否|可选择)/.test(entry.text)),false);
+  assert.equal(skipped.logs.some(entry=>entry.visibility==='public'&&/猎人.*(放弃|选择是否|可选择)/.test(entry.text)),false);
 
   const shot=fixed(12);
   shot.resolveNight({},6);
   shot.resolveSettlement(0);
+  settleAll(shot);
   assert.equal(shot.phase,'lastWords');
   finishLastWords(shot);
   assert.equal(shot.players[6].alive,false);
@@ -183,9 +187,8 @@ test('多人夜间出局后随机选择存活起始位，且首夜死者遗言�
   assert.ok(game.alive().some(player=>player.id===game.speechOrder[0]));
 
   const ended=fixed();
-  ended.players.forEach(player=>player.alive=player.role==='狼人');
-  ended.players.find(player=>player.role==='狼人').alive=false;
-  ended.resolveNight({},null);
+  ended.players.forEach(player=>player.alive=player.id===0||player.id===2);
+  ended.resolveNight({},2);
   settleAll(ended);
   assert.equal(ended.phase,'ended');
   assert.equal(ended.lastWordsQueue.length,0);
@@ -195,9 +198,9 @@ test('白天放逐者有遗言，结束游戏时省略遗言',()=>{
   const game=fixed();
   game.phase='discussion';
   game.openVoting();
-  game.resolveVotes({0:2,1:2,2:1,3:1,4:1,5:1});
+  game.resolveVotes({0:2,1:2,2:0,3:0,4:null,5:null});
   assert.equal(game.phase,'voting');
-  const result=game.resolveVotes({0:2,1:2,2:1,3:1,4:1,5:1});
+  const result=game.resolveVotes({0:null,1:0,2:null,3:0,4:0,5:2});
   assert.equal(result.eliminated,0);
   settleAll(game);
   assert.equal(game.phase,'lastWords');

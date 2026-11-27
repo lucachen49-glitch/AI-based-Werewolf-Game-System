@@ -194,9 +194,12 @@ test('发言请求通过 Responses 结构化输出约束 speech 字段',()=>{
   }});
   assert.equal(body.reasoning.effort,'high');
   assert.equal(body.max_output_tokens,25000);
-  for(const task of [undefined,'hunter']){
-    assert.equal(Agent.responsesBody({...options,actionTask:task}).text,undefined);
-  }
+  assert.equal(Agent.responsesBody({...options}).text,undefined);
+  const hunter=Agent.responsesBody({...options,actionTask:'hunter',allowedTargets:[2,4]});
+  assert.deepEqual(hunter.text,{format:{
+    type:'json_schema',name:'werewolf_hunter',strict:true,
+    schema:{type:'object',properties:{target:{type:['integer','null'],enum:[2,4,null]}},required:['target'],additionalProperties:false}
+  }});
   assert.equal(Agent.responsesBody({...options,actionTask:'night',actionRole:'狼人',allowedTargets:[1,2,3]}).text.format.name,'werewolf_night_wolf');
 });
 

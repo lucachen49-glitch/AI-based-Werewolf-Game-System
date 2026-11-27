@@ -1,19 +1,21 @@
 {
-  "voice": "zh-CN-XiaoxiaoNeural",
+  "voice": "Mixed, see per-room voice",
   "rate": "-5%",
   "pitch": "+0Hz",
   "rooms": {
     "6": {
       "file": "rules-6.mp3",
-      "textSha256": "0f6ff9e3c976aaa33875d2cb51d8f17383aec1fb8e95ff8fe0f347fbc977ee5d",
-      "audioSha256": "a53f48d17ee1e2cb8feb2bbbaa2810b1bcb101d1c4e179fad4ffd2670f4b7719",
-      "bytes": 845856
+      "textSha256": "2919fbe48c5614f1b8381ec47db5f78372c46d4c8e352f7c9eb672c10d74f01d",
+      "audioSha256": "43afdde3934da0e7d15da4f5009ff13e349a740339366609cbf2e76234da2c16",
+      "bytes": 1014624,
+      "voice": "zh-CN-XiaoxiaoNeural"
     },
     "12": {
       "file": "rules-12.mp3",
-      "textSha256": "1911e04ff01385985d26e9367281bcb60b56e0afc0f765f72eb1853c85879552",
-      "audioSha256": "13a54021470b266f661235ab4cfe87aeb9397879f84f1adff8a92345ec3b3617",
-      "bytes": 1065168
+      "textSha256": "f8b1240523815b55ec668a2c9d2f75b3d15ee8037fba44c8febcacc0fdba5752",
+      "audioSha256": "1e1b93dd05a55011375f524d6913c40a723631a8ce5c6735a1f263de96cc4b46",
+      "bytes": 2340672,
+      "voice": "Google Translate TTS (zh-CN)"
     }
   }
 }

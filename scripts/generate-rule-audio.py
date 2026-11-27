@@ -35,6 +35,7 @@ async def main():
             temporary.unlink(missing_ok=True)
         metadata["rooms"][room] = {
             "file": target.name,
+            "voice": config["voice"],
             "textSha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
             "audioSha256": hashlib.sha256(target.read_bytes()).hexdigest(),
             "bytes": target.stat().st_size,

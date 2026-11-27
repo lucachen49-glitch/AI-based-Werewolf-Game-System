@@ -89,8 +89,10 @@
     }
 
     wolfConsensus(choices={}){
-      const votes=this.wolfChoices(choices).map(choice=>choice.status==='selected'?choice.target:null);
-      const unanimous=votes.length>0&&votes.every(target=>target===votes[0]);
+      const selections=this.wolfChoices(choices);
+      const valid=selections.every(choice=>choice.status==='selected'||choice.status==='abstained');
+      const votes=selections.map(choice=>choice.status==='selected'?choice.target:null);
+      const unanimous=valid&&votes.length>0&&votes.every(target=>target===votes[0]);
       return {unanimous,target:unanimous?votes[0]:null};
     }
 
@@ -98,7 +100,8 @@
       const counts={};
       for(const choice of this.wolfChoices(choices))if(choice.status==='selected')counts[choice.target]=(counts[choice.target]||0)+1;
       const max=Math.max(0,...Object.values(counts));
-      return max?this.pick(Object.keys(counts).filter(id=>counts[id]===max).map(Number)):null;
+      const leaders=Object.keys(counts).filter(id=>counts[id]===max).map(Number);
+      return leaders.length>1?this.pick(leaders):leaders[0]??null;
     }
 
     witchOptions(victim){
@@ -298,7 +301,7 @@
 
     addLastWord(id,text){
       if(this.phase!=='lastWords')throw Error('当前不是遗言阶段');
-      if(this.lastWordsQueue[0]!==id)throw Error('当前不是该玩家的遗言顺序');
+      if(this.lastWordsQueue.length===0||this.lastWordsQueue[0]!==id)throw Error('当前不是该玩家的遗言顺序');
       const entry={id,text:limitSpeech(text),round:this.round,pk:false,lastWords:true};
       this.speeches.push(entry);
       this.speechHistory.push(entry);

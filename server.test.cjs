@@ -264,6 +264,7 @@ test('6/12 人自然讲解 MP3 可播放下载及 HEAD 查询，制作脚本和�
     const response=await fetch(`${base}/assets/rules-${room}.mp3?v=1`);
     assert.equal(response.status,200);assert.equal(response.headers.get('content-type'),'audio/mpeg');
     const audio=Buffer.from(await response.arrayBuffer()),entry=metadata.rooms[room];
+    assert.ok(entry.voice);
     assert.ok(audio.length>10000);assert.equal(Number(response.headers.get('content-length')),audio.length);
     assert.equal(audio.length,entry.bytes);
     assert.equal(crypto.createHash('sha256').update(audio).digest('hex'),entry.audioSha256);

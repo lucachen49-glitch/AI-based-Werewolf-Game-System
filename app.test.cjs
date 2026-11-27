@@ -693,7 +693,7 @@ test('所有 API 席位包含 1 号位，模型独立且全程自动发言投票
     assert.equal(request.model,'seat-'+view.seat);assert.equal(request.apiKey,'key-'+view.seat);
     assert.ok(view.players.every(p=>!('role' in p)));
   }
-  assert.equal(new Set(seen.filter(x=>x.task==='speech'&&!x.view.pk).map(x=>x.view.round+':'+x.view.seat)).size,seen.filter(x=>x.task==='speech'&&!x.view.pk).length);
+  assert.equal(new Set(seen.filter(x=>x.task==='speech'&&!x.view.pk&&!x.view.lastWords).map(x=>x.view.round+':'+x.view.seat)).size,seen.filter(x=>x.task==='speech'&&!x.view.pk&&!x.view.lastWords).length);
 });
 
 test('自动完成平票 PK 发言及第二轮投票，候选人不参与投票',async()=>{
@@ -1378,7 +1378,7 @@ test('每夜闭眼与天亮睁眼口令完整，角色口令在请求前播放�
   await vm.runInContext('runNight(epoch)',context);
   for(const role of ['狼人','预言家','女巫']){
     const cue=order.findIndex(t=>t.startsWith(role+'请睁眼'));
-    const action=role==='狼人'?order.findIndex(t=>/提议袭击|没有形成有效的袭击目标/.test(t)):order.findIndex(t=>t==='行动:'+role);
+    const action=role==='狼人'?order.findIndex(t=>/第一轮独立选择|没有形成有效的袭击目标/.test(t)):order.findIndex(t=>t==='行动:'+role);
     const closed=role==='狼人'?action:order.findIndex((t,i)=>i>action&&t.includes(role+'请闭眼'));
     assert.ok(cue>=0&&cue<action&&(role==='狼人'?closed>=action:closed>action),role+': '+order.join('|'));
   }
@@ -1499,31 +1499,37 @@ test('实际夜间行动期间只有当前角色睁眼，闭眼不改变Agent上
  vm.runInContext('reset();releaseEye(true)',context);await vm.runInContext('oldEyeFlush',context);
  assert.equal(vm.runInContext('eyeNight||nightAwake.length>0',context),false);
 });
-test('六人个人狼刀同刀、平票、单狼、放弃和无效目标与女巫及天亮结算一致',async()=>{
+test('六人个人狼刀一致时直接定刀，不一致时第二轮按多数或随机平票结算',async()=>{
   for(const spec of [
-    {targets:[4,4],victim:4,tie:false},
-    {targets:[4,5],victim:5,tie:true},
-    {targets:[4,null],victim:4,tie:false,deadWolf:true},
-    {targets:[null,null],victim:null,tie:false},
-    {targets:[1,99],victim:null,tie:false},
-    {targets:[4,4],victim:4,tie:false,save:true}
+    {first:[4,4],victim:4,rounds:1},
+    {first:[4,5],second:[5,5],victim:5,rounds:2},
+    {first:[4,5],second:[4,5],victim:5,rounds:2,tie:true},
+    {first:[4,null],victim:4,rounds:1,deadWolf:true},
+    {first:[null,null],victim:null,rounds:1},
+    {first:[1,99],second:[4,4],victim:4,rounds:2},
+    {first:[4,4],victim:4,rounds:1,save:true}
   ]){
     const {context}=setup(new Map(),false),spoken=[],choosing=[];let witchVictim,rolls=0;
     context.spec=spec;context.roll=()=>{rolls++;return .99};
-    context.choose=async(id,task,extra)=>{
-      if(id<2)choosing.push(vm.runInContext('seatDecorations(game.players['+id+'])',context));
+    context.choose=(id,task,extra)=>{
+      if(id<2)choosing.push({round:extra.wolfRound});
       if(id===3)witchVictim=extra.victim;
-      return id<2?{target:spec.targets[id]}:id===3?{save:!!spec.save,poison:null}:{target:0};
+      const picks=extra.wolfRound===2?spec.second:spec.first;
+      return id<2?{target:picks[id]}:id===3?{save:!!spec.save,poison:null}:{target:0};
     };
     context.hear=async text=>{spoken.push(text);return true};
-    vm.runInContext("game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES[6][i]);if(spec.deadWolf)game.players[1].alive=false;game.random=roll;decision=choose;speakText=hear;turnDelay=0;spectatorPrefs.narratorEnabled=true",context);
+    vm.runInContext("game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES[6][i]);if(spec.deadWolf)game.players[1].alive=false;game.random=roll;decision=choose;localStoryDecision=choose;speakText=hear;turnDelay=0;spectatorPrefs.narratorEnabled=true",context);
     await vm.runInContext('runNight(epoch)',context);
-    const event=vm.runInContext("observerEvents.find(e=>e.kind==='wolf')",context);
+    const events=vm.runInContext("observerEvents.filter(e=>e.kind==='wolf')",context),event=events.at(-1);
+    assert.equal(events.length,spec.rounds);
     assert.equal(event.target,witchVictim);
     assert.equal(event.wolfChoices.length,spec.deadWolf?1:2);assert.equal(event.private,true);
     assert.ok(event.wolfChoices.every(choice=>choice.status==='selected'||choice.status==='abstained'||choice.status==='invalid'));
-    assert.ok(choosing.every(html=>html.includes('正在选刀')));
-    assert.equal(spoken.filter(text=>/提议袭击|放弃袭击|未形成有效选择/.test(text)).length,1);
+    assert.ok(choosing.every(item=>item.round===1||item.round===2));
+    if(spec.rounds===2)assert.ok(choosing.some(item=>item.round===2));
+    assert.equal(spoken.filter(text=>text.includes('第一轮独立选择')).length,1);
+    assert.equal(spoken.filter(text=>text.includes('第二轮最终选择')).length,spec.rounds===2?1:0);
+    assert.equal(rolls,Number(!!spec.tie||spec.victim===null||!!spec.save));
     if(event.target!==null)assert.match(event.godText,new RegExp('今晚袭击 '+(event.target+1)+' 号'));
     assert.equal(vm.runInContext('wolfPresentation',context),null);
     assert.doesNotMatch(vm.runInContext("$('playersGrid').innerHTML",context),/wolf-choice/);
@@ -1536,14 +1542,14 @@ test('个人选刀在上帝历史和导出保留，普通观战及实际 Agent �
   context.capture=async text=>{shown.push(text);return true};
   vm.runInContext("var productionDecision=decision;game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES[6][i]);turnDelay=0;spectatorPrefs.narratorEnabled=true;speakText=capture;decision=async(id)=>id<2?{target:id+4}:id===3?{save:false,poison:null}:{target:0}",context);
   await vm.runInContext('runNight()',context);
-  assert.match(vm.runInContext("$('commentaryList').innerHTML+JSON.stringify(spectatorExport())",context),/1 号狼人提议袭击 \d+ 号/);
+  assert.match(vm.runInContext("$('commentaryList').innerHTML+JSON.stringify(spectatorExport())",context),/1 号狼人选择袭击 \d+ 号/);
   vm.runInContext("setPerspective('public')",context);
   assert.doesNotMatch(vm.runInContext("$('playersGrid').innerHTML+$('commentaryText').textContent+$('commentaryList').innerHTML+JSON.stringify(spectatorExport())",context),/提议袭击|票数相同|wolfChoices|wolf-choice/);
   vm.runInContext("decision=productionDecision;profiles[0].control='api';profiles[0].endpoint='https://chat.test';profiles[0].model='test'",context);
   await vm.runInContext("decision(0,'speech')",context);
   assert.equal(requests.length,1);assert.doesNotMatch(JSON.stringify(requests[0].messages),/wolfChoices|提议袭击|票数相同|godText|wolf-choice/);
   vm.runInContext("setPerspective('god')",context);
-  assert.match(vm.runInContext("$('commentaryList').innerHTML",context),/1 号狼人提议袭击 \d+ 号/);
+  assert.match(vm.runInContext("$('commentaryList').innerHTML",context),/1 号狼人选择袭击 \d+ 号/);
 });
 
 test('普通观战全夜不展示个人狼刀，不播放私有合并旁白，六与十二人一致',async()=>{
@@ -1559,14 +1565,18 @@ test('普通观战全夜不展示个人狼刀，不播放私有合并旁白，�
   }
 });
 
-test('十二人四狼分刀只确定一次目标，个人明细与女巫及结算一致',async()=>{
+test('十二人四狼首轮不一致后按第二轮多数定刀并保留两轮私有明细',async()=>{
  const {context}=setup(new Map(),false),hints=[],spoken=[];let rolls=0,victim;
- context.roll12=()=>{rolls++;return .99};context.pick12=async(id,task,extra)=>{if(id<4)hints.push(vm.runInContext('seatDecorations(game.players['+id+'])',context));if(id===5)victim=extra.victim;return id<4?{target:id<2?8:9}:id===7?{target:10}:id===5?{save:false,poison:null}:{target:0}};
+ context.roll12=()=>{rolls++;return .99};context.pick12=(id,task,extra)=>{if(id<4)hints.push({round:extra.wolfRound});if(id===5)victim=extra.victim;return id<4?{target:extra.wolfRound===2?(id===3?9:8):(id<2?8:9)}:id===7?{target:10}:id===5?{save:false,poison:null}:{target:0}};
  context.hear12=async text=>{spoken.push(text);return true};
- vm.runInContext("reset(12);game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES[12][i]);game.random=roll12;decision=pick12;speakText=hear12;turnDelay=0;spectatorPrefs.narratorEnabled=true",context);
- await vm.runInContext('runNight()',context);const e=vm.runInContext("observerEvents.find(e=>e.kind==='wolf')",context);
- assert.equal(e.wolfChoices.length,4);assert.equal(e.target,victim);assert.ok(e.target===null||rolls>=1);assert.ok(hints.every(h=>h.includes('正在选刀')));assert.ok(spoken.filter(t=>/提议袭击/.test(t)).length>=1);if(e.target!==null)assert.equal(vm.runInContext('game.players['+e.target+'].alive',context),false);
- vm.runInContext("setPerspective('public')",context);assert.doesNotMatch(vm.runInContext("$('commentaryList').innerHTML+JSON.stringify(spectatorExport())+$('playersGrid').innerHTML",context),/wolfChoices|提议袭击|票数相同|wolf-choice/);
+ vm.runInContext("reset(12);game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES[12][i]);game.random=roll12;decision=pick12;localStoryDecision=pick12;speakText=hear12;turnDelay=0;spectatorPrefs.narratorEnabled=true",context);
+ await vm.runInContext('runNight()',context);const events=vm.runInContext("observerEvents.filter(e=>e.kind==='wolf')",context),first=events[0],final=events.at(-1);
+ assert.equal(events.length,2);assert.equal(first.wolfChoices.length,4);assert.equal(final.wolfChoices.length,4);assert.equal(final.firstRoundChoices.length,4);
+ assert.equal(final.target,8);assert.equal(final.target,victim);assert.equal(rolls,0);
+ assert.ok(hints.every(item=>item.round===1||item.round===2));assert.ok(hints.some(item=>item.round===2));
+ assert.ok(spoken.some(text=>text.includes('第一轮独立选择')));assert.ok(spoken.some(text=>text.includes('第二轮最终选择')));
+ assert.equal(vm.runInContext('game.players[8].alive',context),false);
+ vm.runInContext("setPerspective('public')",context);assert.doesNotMatch(vm.runInContext("$('commentaryList').innerHTML+JSON.stringify(spectatorExport())+$('playersGrid').innerHTML",context),/wolfChoices|选择袭击|票数相同|wolf-choice/);
 });
 
 test('十二人 Agent 不接收人物秘密，剧情选择按人数保存并映射去重项',async()=>{
@@ -1603,10 +1613,10 @@ test('狼刀提示暂停保留、切视角立即隐藏，重置及换房隔离�
     read('wolfPresentation={round:game.round,states:{}};renderPlayers()');
     const running=h.start();await until(()=>groups.length===1);
     read('renderPlayers()');
-    assert.match(read("$('playersGrid').innerHTML"),/正在选刀/);
-    read('togglePause()');assert.match(read("$('playersGrid').innerHTML"),/正在选刀/);
+    assert.match(read("$('playersGrid').innerHTML"),/首轮 正在确认/);
+    read('togglePause()');assert.match(read("$('playersGrid').innerHTML"),/首轮 正在确认/);
     read("setPerspective('public')");assert.doesNotMatch(read("$('playersGrid').innerHTML"),/wolf-choice|正在选刀/);
-    read("setPerspective('god')");assert.match(read("$('playersGrid').innerHTML"),/正在选刀/);
+    read("setPerspective('god')");assert.match(read("$('playersGrid').innerHTML"),/首轮 正在确认/);
     read('reset('+resetSize+')');for(const group of groups)group.close();await running;
     assert.equal(read('wolfPresentation'),null);assert.equal(read('observerEvents.length'),0);
     assert.doesNotMatch(read("$('playersGrid').innerHTML"),/wolf-choice|提议袭击/);
@@ -1765,7 +1775,7 @@ test('竖屏6和12席共享视角隐私，私有夜间提示与旁白不泄漏�
   for(const count of [6,12]){
     vm.runInContext(`reset(${count});game.start();game.phase='night';setPortraitMode(true);setPerspective('god');wolfPresentation={round:game.round,states:{0:{status:'selected',target:2}}};currentCommentary={private:true,godText:'秘密狼刀 3 号',publicText:''};renderAll()`,context);
     const html=()=>vm.runInContext("$('portraitSeatsLeft').innerHTML+$('portraitSeatsRight').innerHTML",context);
-    assert.equal((html().match(/data-portrait-seat=/g)||[]).length,count);assert.match(html(),/提议 3 号/);
+    assert.equal((html().match(/data-portrait-seat=/g)||[]).length,count);assert.match(html(),/选 3 号/);
     assert.equal(vm.runInContext("$('portraitCaption').textContent",context),'秘密狼刀 3 号');
     vm.runInContext("setPerspective('public');currentCommentary={private:true,godText:'不得显示的秘密',publicText:''};apiWaiting={id:0};activeSeat=0;renderAll()",context);
     assert.doesNotMatch(html(),/提议|狼人|女巫|预言家|正在选刀/);
@@ -1839,10 +1849,10 @@ test('十二人竖屏独立显示真实连接状态，行动提示不替代连�
   read("profiles[0].control='local';renderAll()");
   assert.match(read('portraitConnectionBadge(profiles[0])'),/>模拟</);
   read("profiles[0].control='api';profiles[0].connection='error';game.phase='night';setPerspective('god');wolfPresentation={round:game.round,states:{0:{status:'selected',target:2}}};renderAll()");
-  assert.match(read("$('portraitSeatsLeft').innerHTML"),/提议 3 号/);
+  assert.match(read("$('portraitSeatsLeft').innerHTML"),/选 3 号/);
   assert.match(read('portraitConnectionBadge(profiles[0])'),/>离线</);
   read("wolfPresentation.states[0].target=11;renderAll()");
-  assert.match(read("$('portraitSeatsLeft').innerHTML"),/portrait-seat-connection[\s\S]*portrait-avatar[\s\S]*portrait-seat-info[\s\S]*portrait-seat-role[\s\S]*portrait-seat-state[^>]*title="提议 12 号">提议<span class="portrait-seat-number">12<\/span>号<\/span><\/span><\/button>/);
+  assert.match(read("$('portraitSeatsLeft').innerHTML"),/portrait-seat-connection[\s\S]*portrait-avatar[\s\S]*portrait-seat-info[\s\S]*portrait-seat-role[\s\S]*portrait-seat-state[^>]*title="首轮 选 12 号">首轮 选\s*<span class="portrait-seat-number">12<\/span>\s*号<\/span><\/span><\/button>/);
   assert.equal(read("portraitActionLabel('投 10 号')"),'投给<span class="portrait-seat-number">10</span>号');
   assert.equal(read("portraitActionLabel('弃票')"),'弃票');
   const rightHtml=read("$('portraitSeatsRight').innerHTML");
@@ -2826,7 +2836,7 @@ test('行动诊断区分字段、座位和技能约束，六人与十二人都�
   const {safeEntry}=require('./agent-log.cjs');
   for(const roomSize of [6,12])for(const item of cases){
     context.validationCase={...item,roomSize,text:JSON.stringify(item.reply)};
-    read('size=validationCase.roomSize;game=new Nightfall.Game(size).start();game.players[0].role=validationCase.skill?"女巫":"平民";game.potions={save:validationCase.saveAvailable!==false,poison:validationCase.poisonAvailable!==false}');
+    read('size=validationCase.roomSize;game=new Nightfall.Game(size).start();game.players[0].role=validationCase.skill?"女巫":"平民";game.potions={save:validationCase.saveAvailable!==false,poison:validationCase.poisonAvailable!==false};if(validationCase.task==="hunter"){game.players[0].role="猎人";game.players[0].alive=false;game.players[0].cause="vote";game.beginSettlement("discussion",[0],true);game.settlementStep()}');
     let failure;
     assert.throws(()=>read('validateAgentDecision(0,validationCase.task,validationCase.text,buildAgentContext(0,validationCase.task,{victim:1}),{victim:1})'),error=>{failure=error;return true});
     const entry=safeEntry({event:'validation_failed',code:failure.code,validation:failure.validation,responseChars:failure.responseChars});
@@ -2981,4 +2991,11 @@ test('批量测试重置时中止全部并发中的连接请求',async()=>{
   vm.runInContext('reset(6)',context);await run;
   assert.equal(aborted,3);
   assert.equal(vm.runInContext('profiles.some(p=>["testing","queued"].includes(p.connection))',context),false);
+});
+test('规则页展示屠边胜负，并说明双条件同时满足时好人获胜',()=>{
+  const html=fs.readFileSync('index.html','utf8');
+  assert.match(html,/好人阵营[\s\S]*?狼人全部出局/);
+  assert.match(html,/狼人阵营[\s\S]*?神职或平民任一阵营全部出局/);
+  assert.match(html,/两种胜利条件同时满足时，好人获胜/);
+  assert.doesNotMatch(html,/狼人数量\s*≥\s*好人数量|狼人数量\s*>=\s*好人数量/);
 });
