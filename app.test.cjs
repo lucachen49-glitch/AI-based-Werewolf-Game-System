@@ -383,7 +383,9 @@ test('测试连接使用同一转发通道，保存后保留连接结果与已�
   assert.equal(requests[0].messages[0].content,'Reply with OK.');
   assert.equal(requests[0].purpose,'connection-test');
   assert.equal(requests[0].maxTokens,350);
-  assert.equal('reasoningEffort' in requests[0],false);
+  // The test sends the seat's real reasoning effort so it validates what games will use.
+  assert.equal(requests[0].reasoningEffort,vm.runInContext('NightfallAgentRequest.normalizeReasoningEffort(profiles[8].reasoningEffort)',context));
+  assert.equal(requests[0].seat,9);
   vm.runInContext("openAgent(8);lastConnectionTest={signature:connectionSignature(profiles[8]),connection:'ok'};saveAgent()",context);
   assert.equal(vm.runInContext('profiles[8].connection',context),'ok');
   assert.equal(JSON.parse(saved.get('nightfall-profiles-v1'))[8].key,'secret-test-key');
@@ -856,7 +858,8 @@ test('批量测试失败保留每席位原因，未填写密钥显示补填提�
 
 test('批量测试即时排队、逐席位加载与结果同步，重复操作不会启动新请求',async()=>{
   const {context}=setup();const pending=[];
-  vm.runInContext("reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]};profiles[8].control='local';profiles[0].connection='ok';profiles[2].connection='error';profiles[2].connectionError='旧错误'",context);
+  // Same host, different models: tested in turn rather than shared or in parallel.
+  vm.runInContext("reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8],model:'second-model'};profiles[8].control='local';profiles[0].connection='ok';profiles[2].connection='error';profiles[2].connectionError='旧错误'",context);
   context.fetch=async()=>new Promise(resolve=>pending.push(resolve));
   const run=vm.runInContext('testAll()',context);
   assert.deepEqual(Array.from(vm.runInContext('profiles.slice(0,3).map(p=>connectionInfo(p).state)',context)),['testing','local','queued']);
@@ -1965,10 +1968,26 @@ test('六人与十二人旧 Agent 配置恢复后发言上限、token预算及 x
     await vm.runInContext("apiCall(profiles[0],[{role:'user',content:'test'}])", restored.context);
     assert.equal(restored.requests.at(-1).purpose, 'connection-test');
     assert.equal(restored.requests.at(-1).maxTokens, 350);
-    assert.equal('reasoningEffort' in restored.requests.at(-1), false);
+    assert.equal(restored.requests.at(-1).reasoningEffort, 'xhigh');
     vm.runInContext('renderAgents()', restored.context);
     assert.match(vm.runInContext("$('agentGrid').innerHTML", restored.context), /推理强度 · 超高（xhigh）/);
   }
+});
+
+test('Agent 推理强度 medium 可在配置页保存、恢复、展示并传给 API',async()=>{
+  assert.match(fs.readFileSync('index.html','utf8'),/<option value="medium">中（medium）<\/option>/);
+  const {context,saved}=setup(new Map(),false);
+  const read=code=>vm.runInContext(code,context);
+  read("openAgent(0);$('controlInput').value='api';$('endpointInput').value='https://example.test/v1';$('modelInput').value='medium-model';$('keyInput').value='medium-key';$('reasoningEffortInput').value='medium';saveAgent();renderAgents()");
+  assert.equal(read('profiles[0].reasoningEffort'),'medium');
+  assert.equal(JSON.parse(saved.get('nightfall-profiles-v1'))[0].reasoningEffort,'medium');
+  assert.match(read("$('agentGrid').innerHTML"),/推理强度 · 中（medium）/);
+  const restored=setup(saved,false);
+  assert.equal(vm.runInContext('profiles[0].reasoningEffort',restored.context),'medium');
+  await vm.runInContext("apiCall(profiles[0],[{role:'user',content:'test'}])",restored.context);
+  assert.equal(restored.requests.at(-1).reasoningEffort,'medium');
+  vm.runInContext('renderAgents()',restored.context);
+  assert.match(vm.runInContext("$('agentGrid').innerHTML",restored.context),/推理强度 · 中（medium）/);
 });
 
 test('达到发言 token 上限时拒绝不完整 JSON 且不自动重复请求',async()=>{
@@ -2901,4 +2920,65 @@ test('六与十二人夜间角色音效仅在上帝视角播放',async()=>{
   }
   assert.deepEqual(sounds,perspective==='god'?['wolf','guard','seer','save','poison']:[]);
  }
+});
+
+test('批量测试中相同接口、模型、密钥和推理强度的席位只请求一次并共享结果',async()=>{
+  const {context}=setup();const sent=[];
+  vm.runInContext("reset(12);profiles[0]={...profiles[8]};profiles[2]={...profiles[8]}",context);
+  context.fetch=async(url,options)=>{sent.push(JSON.parse(options.body));return {ok:true,json:async()=>({connection:{ok:true,mode:'stream'}})}};
+  await vm.runInContext('testAll()',context);
+  assert.equal(sent.length,1);
+  assert.deepEqual(Array.from(vm.runInContext('[0,2,8].map(i=>profiles[i].connection)',context)),['ok','ok','ok']);
+  assert.match(vm.runInContext("$('toast').textContent",context),/3 \/ 3 个 API Agent 连接成功/);
+  vm.runInContext("profiles[2].reasoningEffort='high'",context);sent.length=0;
+  await vm.runInContext('testAll()',context);
+  assert.equal(sent.length,2);
+  assert.deepEqual(sent.map(r=>r.reasoningEffort).sort(),['high','xhigh']);
+});
+
+test('批量测试不同接口并发进行且最多同时三个，按钮显示正在测试的全部席位',async()=>{
+  const {context}=setup();const pending=[];
+  vm.runInContext("reset(12);for(const [i,host] of [[0,'a'],[1,'b'],[2,'c'],[3,'d']])profiles[i]={...profiles[8],endpoint:'https://'+host+'.example.test/v1'};profiles[8].control='local'",context);
+  context.fetch=async(url,options)=>new Promise(resolve=>pending.push({resolve,body:JSON.parse(options.body)}));
+  const run=vm.runInContext('testAll()',context);
+  await until(()=>pending.length===3);
+  assert.deepEqual(pending.map(p=>p.body.endpoint),['https://a.example.test/v1','https://b.example.test/v1','https://c.example.test/v1']);
+  assert.match(vm.runInContext("$('testAllBtn').textContent",context),/3 \/ 4 · 1、2、3 号/);
+  assert.equal(vm.runInContext('profiles[3].connection',context),'queued');
+  pending[1].resolve({ok:true,json:async()=>({connection:{ok:true,mode:'stream'}})});
+  await until(()=>pending.length===4);
+  assert.match(vm.runInContext("$('testAllBtn').textContent",context),/4 \/ 4 · 1、3、4 号/);
+  for(const p of [pending[0],pending[2],pending[3]])p.resolve({ok:true,json:async()=>({connection:{ok:true,mode:'stream'}})});
+  await run;
+  assert.match(vm.runInContext("$('toast').textContent",context),/4 \/ 4 个 API Agent 连接成功/);
+});
+
+test('响应头已返回但模型超时显示“已连通 · 响应较慢”，不计为连接失败',async()=>{
+  const {context}=setup();
+  const message='接口已连通（HTTP 200），但 60 秒内未返回模型结果，响应较慢';
+  context.fetch=async()=>({ok:false,status:504,json:async()=>({error:{code:'UPSTREAM_TIMEOUT',stage:'response',message}})});
+  assert.equal(await vm.runInContext('testConnection(profiles[8],false)',context),false);
+  assert.equal(vm.runInContext('profiles[8].connection',context),'slow');
+  assert.match(vm.runInContext("$('toast').textContent",context),/已连通但响应较慢/);
+  vm.runInContext('reset(12)',context);
+  await vm.runInContext('testAll()',context);
+  assert.match(vm.runInContext("$('agentGrid').innerHTML",context),/已连通 · 响应较慢/);
+  assert.match(vm.runInContext("$('agentGrid').innerHTML",context),/agent-error agent-slow/);
+  assert.doesNotMatch(vm.runInContext("$('agentGrid').innerHTML",context),/请补填并保存/);
+  assert.match(vm.runInContext("$('playersGrid').innerHTML",context),/API 响应慢/);
+  assert.match(vm.runInContext("$('toast').textContent",context),/0 \/ 1 个 API Agent 连接成功，1 个已连通但响应较慢/);
+  context.fetch=async()=>({ok:false,status:504,json:async()=>({error:{code:'UPSTREAM_TIMEOUT',stage:'connect',message:'连接接口超时'}})});
+  await vm.runInContext('testAll()',context);
+  assert.equal(vm.runInContext('profiles[8].connection',context),'error');
+});
+
+test('批量测试重置时中止全部并发中的连接请求',async()=>{
+  const {context}=setup();let aborted=0;
+  vm.runInContext("reset(12);profiles[0]={...profiles[8],endpoint:'https://a.example.test'};profiles[1]={...profiles[8],endpoint:'https://b.example.test'}",context);
+  context.fetch=async(url,{signal})=>new Promise((resolve,reject)=>signal.addEventListener('abort',()=>{aborted++;reject(new DOMException('Cancelled','AbortError'))},{once:true}));
+  const run=vm.runInContext('testAll()',context);
+  await until(()=>vm.runInContext('connectionBatch?.controllers.size',context)===3);
+  vm.runInContext('reset(6)',context);await run;
+  assert.equal(aborted,3);
+  assert.equal(vm.runInContext('profiles.some(p=>["testing","queued"].includes(p.connection))',context),false);
 });

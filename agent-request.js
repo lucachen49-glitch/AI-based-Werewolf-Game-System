@@ -6,7 +6,7 @@
   const PROTOCOL='responses';
   const OUTPUT_MAX_TOKENS=25000;
   const DEFAULT_REASONING_EFFORT='xhigh';
-  const SUPPORTED_REASONING_EFFORTS=['high','xhigh'];
+  const SUPPORTED_REASONING_EFFORTS=['medium','high','xhigh'];
   function normalizeReasoningEffort(value){return SUPPORTED_REASONING_EFFORTS.includes(value)?value:DEFAULT_REASONING_EFFORT;}
 
   function inputContent(content){
@@ -30,12 +30,12 @@
     return url.href;
   }
 
-  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,max_tokens=OUTPUT_MAX_TOKENS,actionTask,actionRole,allowedTargets,nightOptions}){
+  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,max_tokens=OUTPUT_MAX_TOKENS,actionTask,actionRole,allowedTargets,nightOptions,stream=false}){
     const body={
       model:model.trim(),
       input:messages.map(message=>({role:message.role,content:inputContent(message.content)})),
       max_output_tokens:max_tokens,
-      stream:false,
+      stream:stream===true,
       store:false
     };
     if(reasoning_effort!==null)body.reasoning={effort:normalizeReasoningEffort(reasoning_effort)};
@@ -58,6 +58,23 @@
       body.text={format:{
         type:'json_schema',
         name:'werewolf_vote',
+        strict:true,
+        schema:{
+          type:'object',
+          properties:{target:targetSchema},
+          required:['target'],
+          additionalProperties:false
+        }
+      }};
+    }
+    if(actionTask==='hunter'){
+      const targetSchema=Array.isArray(allowedTargets)?{
+        type:['integer','null'],
+        enum:[...new Set(allowedTargets.filter(Number.isInteger)),null]
+      }:{type:['integer','null']};
+      body.text={format:{
+        type:'json_schema',
+        name:'werewolf_hunter',
         strict:true,
         schema:{
           type:'object',

@@ -45,7 +45,11 @@ function portraitSeatState(p){
 }
 function portraitSeatHint(p){
   const wolf=game.phase==='night'&&spectatorPrefs.perspective==='god'&&wolfPresentation?.round===game.round?wolfPresentation.states[p.id]:null;
-  if(wolf)return wolf.status==='choosing'?'正在选刀':wolf.status==='selected'?'提议 '+(wolf.target+1)+' 号':wolf.status==='abstained'?'放弃袭击':'无有效选择';
+  if(wolf){
+    const label=choice=>choice?.status==='choosing'?'确认中':choice?.status==='selected'?'选 '+(choice.target+1)+' 号':choice?.status==='abstained'?'弃袭':'无有效选择';
+    if(wolfPresentation.confirming)return '首轮 '+label(wolfPresentation.firstRound?.[p.id])+' / 二轮 '+label(wolf);
+    return '首轮 '+label(wolf)+(wolfPresentation.finalChoices?' · 已定':'');
+  }
   const vote=votePresentation?.states[p.id];
   if(!vote)return '';
   return vote==='revealed'?(votePresentation.votes[p.id]==null?'弃票':'投 '+(votePresentation.votes[p.id]+1)+' 号'):({pending:'待投票',choosing:'投票中',submitted:'已投票',failed:'投票失败',cancelled:'等待重试',excluded:'本轮不投票'}[vote]||'');

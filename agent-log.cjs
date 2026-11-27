@@ -2,7 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {cleanSystemLogs}=require('./system-logs.cjs');
-const tasks=new Set(['speech','night','vote','hunter']);
+const tasks=new Set(['speech','night','vote','hunter','connection-test']);
 const events=new Set(['started','response_received','failed','cancelled','validation_failed','stopped','action_validated']);
 
 const validationRules={
@@ -79,6 +79,18 @@ function safeEntry(entry){
   }
   for(const field of ['responseChars','assistantMessageCount','commentaryMessageCount','finalMessageCount']){
     if(Number.isInteger(entry[field])&&entry[field]>=0&&entry[field]<=2*1024*1024)result[field]=entry[field];
+  }
+  // Connection tests record where time went (headers, first stream event), never keys or paths.
+  if(result.task==='connection-test'){
+    if(typeof entry.endpointHost==='string'&&/^[a-zA-Z0-9.-]{1,253}(?::\d{1,5})?$|^\[[0-9a-fA-F:.]{2,45}\](?::\d{1,5})?$/.test(entry.endpointHost))result.endpointHost=entry.endpointHost.toLowerCase();
+    if(typeof entry.model==='string'&&/^[\w.:/@+-]{1,200}$/.test(entry.model))result.model=scrubText(entry.model);
+    if(['medium','high','xhigh'].includes(entry.reasoningEffort))result.reasoningEffort=entry.reasoningEffort;
+    if(['stream','json','fallback'].includes(entry.connectionMode))result.connectionMode=entry.connectionMode;
+    if(['connect','response'].includes(entry.stage))result.stage=entry.stage;
+    if(Number.isInteger(entry.attempts)&&entry.attempts>=1&&entry.attempts<=10)result.attempts=entry.attempts;
+    for(const field of ['headersMs','firstEventMs']){
+      if(Number.isFinite(entry[field])&&entry[field]>=0)result[field]=Math.round(entry[field]);
+    }
   }
   if(result.event==='validation_failed'&&['INVALID_ACTION','INVALID_AGENT_RESPONSE'].includes(result.code)){
     const validation=safeValidation(entry.validation);

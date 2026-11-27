@@ -1,108 +1,316 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
-const {Game,ROLES}=require('./engine.js');
-function fixed(size=6){const g=new Game(size,()=>.4);g.start();g.players.forEach((p,i)=>p.role=ROLES[size][i]);return g}
+const {Game,ROLES,RULES}=require('./engine.js');
 
-test('六与十二人女巫用药前条件、未生效原因与最终结算一致',()=>{
- const O=require('./observer.js');
- for(const size of [6,12])for(const kind of ['save','poison','unused','spent','no-victim','self','invalid','save-spent','poison-spent']){
-  const g=fixed(size),w=size===6?3:5,target=size===6?4:8;
-  if(kind==='self')g.round=2;
-  if(kind==='spent')g.potions={save:false,poison:false};
-  if(kind==='save-spent')g.potions.save=false;
-  if(kind==='poison-spent')g.potions.poison=false;
-  const victim=kind==='no-victim'?null:kind==='self'?w:target;
-  const action={save:['save','no-victim','self','save-spent'].includes(kind),poison:kind==='poison'?target:kind==='invalid'?w:kind==='poison-spent'?0:null};
-  const choices={[w]:action,...(size===12?{7:{target}}:{})},before=JSON.stringify(g);
-  const plan=g.nightPlan(choices,victim);assert.equal(JSON.stringify(g),before);
-  assert.deepEqual(plan.witchState,g.witchOptions(victim));
-  const result=g.resolveNight(choices,victim);assert.deepEqual(result.witchOutcome,plan.witchOutcome);
-  const e=O.nightAction('女巫',plan,[w]),cue=O.nightCue('女巫',g.round,[w],plan.witchState);
-  assert.equal(O.project(e,'public'),'');assert.equal(O.project(cue,'public'),'');
-  assert.match(cue.godText,/女巫请睁眼/);assert.match(cue.godText,kind==='self'?/今晚不能自救/:/首夜/);
-  if(kind==='save'){assert.equal(plan.saved,true);assert.equal(g.players[target].alive,true);assert.match(e.godText,new RegExp(`${w+1} 号女巫对 ${target+1} 号 使用解药`));assert.match(e.godText,/抵挡本夜的狼刀/)}
-  else if(kind==='poison'){assert.equal(plan.poisoned,target);assert.equal(g.players[target].cause,'poison');assert.match(e.godText,/毒药无视守护/)}
-  else{assert.equal(plan.witchOutcome.type,'none');const expected={unused:'unused',spent:'potions-spent','no-victim':'no-victim',self:'self-save-forbidden',invalid:'invalid-poison','save-spent':'save-spent','poison-spent':'poison-spent'};assert.ok(plan.witchOutcome.reasons.includes(expected[kind]));assert.match(e.godText,/本夜没有使用药水/)}
-  assert.doesNotMatch(e.godText,/已经死亡|已经出局|因为害怕|怀疑/);
- }
-});
+function fixed(size=6,random=()=>.4){
+  const game=new Game(size,random).start();
+  game.players.forEach((player,index)=>player.role=ROLES[size][index]);
+  return game;
+}
 
-test('狼人可选择任意存活玩家，包括自己和队友，弃权及非法目标仍按规则处理',()=>{
-  const g=fixed();g.players[5].alive=false;
-  for(const [raw,status,target]of [[4,'selected',4],['3','selected',3],[0,'selected',0],[1,'selected',1],[null,'abstained',null],[undefined,'invalid',null],['','invalid',null],[5,'invalid',null],[99,'invalid',null]]){
-    const choices={0:{target:raw},1:{target:null}},before=JSON.stringify(g);
-    assert.deepEqual(g.wolfChoices(choices),[{id:0,target,status},{id:1,target:null,status:'abstained'}]);
-    assert.equal(JSON.stringify(g),before);assert.equal(g.wolfTarget(choices),target);
+function settleAll(game,shoot=()=>null){
+  while(game.phase==='settle'){
+    const step=game.settlementStep();
+    assert.ok(step,'每个出局者都应有统一结算步骤');
+    game.resolveSettlement(step.hunter?shoot(step.id,game):null);
   }
-  g.players[1].alive=false;assert.equal(g.wolfChoices({}).length,1);
+}
+
+function finishLastWords(game){
+  while(game.phase==='lastWords')game.addLastWord(game.lastWordsQueue[0],'最后陈述');
+  if(game.phase==='lastWords')game.finishLastWords();
+}
+
+test('规则说明明确采用屠边、遗言、发言顺序和两轮狼刀',()=>{
+  assert.match(RULES,/神职全部出局或平民全部出局/);
+  assert.match(RULES,/第二夜起夜间出局没有遗言/);
+  assert.match(RULES,/第一轮一致则直接确定/);
+  assert.match(RULES,/发言从唯一夜间死者的下一位存活玩家开始/);
 });
 
-test('夜间展示计划无副作用，固定狼刀不再次随机且与结算结果一致',()=>{
-  const g=fixed(12);let rolls=0;g.random=()=>{rolls++;return .2};
-  const choices={0:{target:6},1:{target:8},4:{target:0},5:{save:true,poison:0},7:{target:6}};
-  const victim=g.wolfTarget(choices),before=JSON.stringify(g);const plan=g.nightPlan(choices,victim);
-  assert.equal(JSON.stringify(g),before);assert.equal(rolls,1);assert.equal(g.potions.save,true);assert.deepEqual(g.knowledge,{});
-  const result=g.resolveNight(choices,victim);assert.equal(rolls,1);
-  for(const key of Object.keys(plan))assert.deepEqual(result[key],plan[key]);
-  assert.equal(result.saved,true);assert.equal(result.poisoned,null);assert.deepEqual(result.deaths,[]);
-});
-
-test('夜间无效目标与药水限制在展示和结算采用相同规则',()=>{
-  const g=fixed(12);g.lastGuard=8;g.round=2;
-  const choices={4:{target:4},5:{save:true,poison:6},7:{target:8}};
-  const plan=g.nightPlan(choices,5);assert.equal(plan.guardTarget,null);assert.equal(plan.seerCheck,null);assert.equal(plan.saved,false);assert.equal(plan.poisoned,6);
-  g.resolveNight(choices,5);assert.equal(g.pendingHunter,null);assert.equal(g.players[6].cause,'poison');assert.equal(g.potions.poison,false);
-});
-
-test('跨轮保留公开发言，重开清空历史',()=>{const g=fixed();g.phase='discussion';g.addSpeech(4,'我怀疑1号。');g.openVoting();g.resolveVotes({});g.resolveNight({});assert.equal(g.context(5).speeches[0].text,'我怀疑1号。');assert.equal(g.context(5).speeches[0].round,1);assert.equal(g.speeches.length,0);g.reset();assert.equal(g.speechHistory.length,0)});
-test('投票上下文可带入超过120条的完整公开发言并保留轮次和PK标记',()=>{
- const g=fixed(12);
- for(let i=0;i<125;i++)g.speechHistory.push({id:i%12,text:`发言${i+1}`,round:Math.floor(i/12)+1,pk:i===123});
- assert.equal(g.context(0).speeches.length,120);
- const vote=g.context(0,[],{includeAllSpeeches:true});
- assert.equal(vote.speeches.length,125);
- assert.deepEqual(vote.speeches[0],{seat:1,text:'发言1',round:1,pk:false});
- assert.deepEqual(vote.speeches.at(-2),{seat:4,text:'发言124',round:11,pk:true});
- assert.deepEqual(vote.speeches.at(-1),{seat:5,text:'发言125',round:11,pk:false});
- for(let i=0;i<25;i++)g.logs.push({text:`公开事件${i+1}`,round:Math.floor(i/6)+1,phase:'voting'});
- const night=g.context(0,[],{includeAllSpeeches:true,includeAllPublicEvents:true});
- assert.equal(night.speeches.length,125);
- assert.equal(night.publicEvents.length,26);
- assert.deepEqual(night.publicEvents.at(-1),{round:5,phase:'voting',text:'公开事件25'});
-});
-test('普通与PK发言记录、Agent上下文统一截断到1400个Unicode字符',()=>{const g=fixed();g.phase='discussion';const long='狼人🧛'.repeat(500);g.addSpeech(0,long);assert.equal(Array.from(g.speeches[0].text).length,1400);assert.equal(g.speechHistory[0].text,g.speeches[0].text);assert.equal(g.context(1).speeches[0].text,g.speeches[0].text);g.pk=[0,1];g.recordSpeech(1,long);assert.equal(Array.from(g.speeches[0].text).length,1400);assert.equal(g.speechHistory[1].text,g.speeches[0].text)});
-
-test('API 目标统一使用1起始座位号，守卫信息只对自己可见',()=>{const g=fixed(12);g.lastGuard=0;assert.equal(g.context(7).lastGuard,1);assert.equal(g.context(8).lastGuard,undefined);assert.equal(g.legalTargets(7,'night').includes(1),false);assert.ok(g.legalTargets(7,'night').includes(8));assert.deepEqual(g.legalTargets(0,'night'),[1,2,3,4,5,6,7,8,9,10,11,12]);g.pk=[8,9];assert.deepEqual(g.legalTargets(8,'vote'),[]);assert.deepEqual(g.legalTargets(7,'vote'),[9,10])});
-test('6/12 人角色数量正确且随机发牌',()=>{for(const n of [6,12]){const g=new Game(n).start();assert.equal(g.alive().length,n);assert.equal(g.players.filter(p=>p.role==='狼人').length,n===6?2:4);assert.deepEqual(g.players.map(p=>p.role).sort(),[...ROLES[n]].sort())}});
-test('预言家信息私有，不向平民暴露任何身份',()=>{const g=fixed();g.resolveNight({0:{target:4},1:{target:4},2:{target:0},3:{save:true}});assert.equal(g.knowledge[2][0],'狼人');assert.deepEqual(g.context(4).checks,{});assert.ok(g.context(4).players.every(p=>!('role'in p)));assert.equal(g.context(4).wolfTeammates,undefined);assert.deepEqual(g.context(0).wolfTeammates,[2])});
-test('女巫解药只用一次，且每晚不得同时用毒',()=>{const g=fixed();let result=g.resolveNight({0:{target:4},1:{target:4},3:{save:true,poison:0}});assert.equal(result.saved,true);assert.equal(result.poisoned,null);assert.equal(g.potions.save,false);assert.equal(g.potions.poison,true);g.phase='night';g.round=2;result=g.resolveNight({0:{target:5},1:{target:5},3:{save:true}});assert.equal(result.saved,false);assert.equal(g.players[5].alive,false)});
-test('女巫仅首夜可自救',()=>{for(const round of [1,2]){const g=fixed();g.round=round;g.resolveNight({0:{target:3},1:{target:3},3:{save:true}});assert.equal(g.players[3].alive,round===1)}});
-test('守卫不能连续守同一人，毒药无视守护',()=>{const g=fixed(12);g.resolveNight({0:{target:8},1:{target:8},2:{target:8},3:{target:8},7:{target:8}});assert.equal(g.players[8].alive,true);g.phase='night';g.round=2;g.resolveNight({0:{target:8},1:{target:8},2:{target:8},3:{target:8},7:{target:8},5:{poison:9}});assert.equal(g.players[8].alive,false);assert.equal(g.players[9].alive,false)});
-test('猎人被狼刀可开枪，中毒不能开枪',()=>{const g=fixed(12);g.resolveNight({0:{target:6},1:{target:6},2:{target:6},3:{target:6}});assert.equal(g.phase,'hunter');g.shoot(0);assert.equal(g.players[0].alive,false);assert.equal(g.phase,'discussion');const poisoned=fixed(12);poisoned.resolveNight({5:{poison:6}});assert.equal(poisoned.pendingHunter,null);assert.equal(poisoned.phase,'discussion')});
-test('首轮平票 PK、二轮平票无人出局，PK 候选人不能投票',()=>{const g=fixed();g.phase='discussion';g.openVoting();let r=g.resolveVotes({0:2,1:2,2:3,3:2,4:3,5:3});assert.equal(r.tie,true);assert.deepEqual(g.pk,[2,3]);r=g.resolveVotes({0:2,1:3,2:3,3:2,4:2,5:3});assert.equal(r.eliminated,null);assert.equal(g.alive().length,6);assert.equal(g.phase,'night');assert.equal(g.votes[2],null);assert.equal(g.votes[3],null)});
-test('自投与出局玩家选票无效，全员弃票进入下一夜',()=>{const g=fixed();g.phase='discussion';g.openVoting();g.resolveVotes({0:0,1:1,2:2,3:3,4:4,5:5});assert.equal(g.alive().length,6);assert.equal(g.round,2)});
-test('最终狼人被放逐，好人获胜',()=>{const g=fixed();g.players[0].alive=false;g.phase='discussion';g.openVoting();g.resolveVotes({1:2,2:1,3:1,4:1,5:1});assert.equal(g.winner,'好人');assert.equal(g.phase,'ended')});
-test('狼人数量不小于好人时狼人胜',()=>{const g=fixed();g.players[4].alive=false;g.resolveNight({0:{target:5},1:{target:5}});assert.equal(g.winner,'狼人')});
-test('随机全 AI 对局在 6/12 人下能完成并保持状态一致',()=>{for(const size of [6,12])for(let run=0;run<60;run++){const g=new Game(size).start();let steps=0;while(!g.winner&&steps++<100){if(g.phase==='night'){const choices={};for(const p of g.alive()){const targets=g.alive().filter(t=>p.role==='狼人'?t.role!=='狼人':t.id!==p.id);choices[p.id]={target:g.pick(targets)?.id??null};if(p.role==='女巫')choices[p.id]={save:g.potions.save,poison:null}}g.resolveNight(choices)}else if(g.phase==='discussion')g.openVoting();else if(g.phase==='voting'){const votes={};for(const p of g.alive()){const targets=g.alive().filter(t=>t.id!==p.id&&(!g.pk||g.pk.includes(t.id)));votes[p.id]=g.pick(targets)?.id??null}g.resolveVotes(votes)}else if(g.phase==='hunter')g.shoot(g.pick(g.alive())?.id??null);assert.equal(g.players.length,size)}assert.ok(g.winner,`${size} 人对局应能结束`);assert.equal(g.phase,'ended')}});
-
-test('Agent 上下文不暴露全员身份表，并仅提供角色有权知道的私有信息', () => {
-  const g = fixed(12);
-  g.knowledge[4] = { 0: '狼人' };
-  g.lastGuard = 2;
-  g.potions = { save: false, poison: true };
-
-  for (let id = 0; id < g.size; id++) {
-    const context = g.context(id, [], { includeAllSpeeches: true, includeAllPublicEvents: true });
-    assert.equal(Object.hasOwn(context, 'board'), false);
-    assert.ok(context.players.every(player => !Object.hasOwn(player, 'role')));
-    if (id !== 4) assert.deepEqual(context.checks, {});
-    if (id !== 5) assert.equal(context.potions, undefined);
-    if (id !== 7) assert.equal(context.lastGuard, undefined);
-    if (id < 4) assert.deepEqual(context.wolfTeammates, [1, 2, 3, 4].filter(seat => seat !== id + 1));
-    else assert.equal(context.wolfTeammates, undefined);
+test('6 人与 12 人均按屠边判胜，狼队全灭优先判好人胜',()=>{
+  for(const size of [6,12]){
+    for(const eliminatedRole of ['神职','平民']){
+      const game=fixed(size);
+      const protectedRole=eliminatedRole==='神职'?'狼人':'神职';
+      for(const player of game.players){
+        if(eliminatedRole==='神职'&&['预言家','女巫','猎人','守卫'].includes(player.role))player.alive=false;
+        if(eliminatedRole==='平民'&&player.role==='平民')player.alive=false;
+      }
+      assert.equal(game.checkWinner(),'狼人',`${size} 人屠${eliminatedRole==='神职'?'神':'民'}边应判狼人胜`);
+    }
+    const game=fixed(size);
+    for(const player of game.players)if(player.role==='狼人')player.alive=false;
+    assert.equal(game.checkWinner(),'好人');
+    assert.equal(game.phase,'ended');
   }
+  const simultaneous=fixed();
+  for(const player of simultaneous.players)player.alive=false;
+  assert.equal(simultaneous.checkWinner(),'好人');
+});
 
-  assert.deepEqual(g.context(4).checks, { 1: '狼人' });
-  assert.deepEqual(g.context(5).potions, { save: false, poison: true });
-  assert.equal(g.context(7).lastGuard, 3);
+test('狼人数量暂时不少于好人时不会提前结束',()=>{
+  const game=fixed();
+  for(const player of game.players)player.alive=player.role==='狼人'||player.role==='预言家'||player.role==='平民'&&player.id===4;
+  assert.equal(game.alive().filter(player=>player.role==='狼人').length,2);
+  assert.equal(game.alive().filter(player=>player.role!=='狼人').length,2);
+  assert.equal(game.checkWinner(),null);
+});
+
+test('同守同救仍出局，死因为狼刀且解药消耗',()=>{
+  const game=fixed(12);
+  const result=game.resolveNight({5:{save:true},7:{target:6}},6);
+  assert.equal(result.saved,true);
+  assert.equal(result.doubleProtection,true);
+  assert.equal(game.players[6].alive,false);
+  assert.equal(game.players[6].cause,'wolf');
+  assert.equal(game.potions.save,false);
+});
+
+test('天亮死讯按座位号排列且不公开死因',()=>{
+  const game=fixed(12);
+  game.resolveNight({5:{poison:1}},6);
+  const dawn=game.logs.find(entry=>entry.text.startsWith('天亮了。'));
+  assert.match(dawn.text,/2 号、7 号/);
+  assert.doesNotMatch(dawn.text,/狼袭|中毒|毒药|狼刀/);
+});
+
+test('预言家不能重复查验，已查验目标不会再次进入合法目标',()=>{
+  const game=fixed();
+  game.resolveNight({2:{target:0}},null);
+  assert.equal(game.knowledge[2][0],'狼人');
+  assert.equal(game.legalTargets(2,'night').includes(1),false);
+  game.nextNight();
+  const result=game.resolveNight({2:{target:0}},null);
+  assert.equal(result.seerCheck,null);
+  assert.equal(Object.keys(game.knowledge[2]).length,1);
+});
+
+test('狼刀两轮先看是否一致，再按多数与随机平票定刀',()=>{
+  const game=fixed();
+  assert.deepEqual(game.wolfConsensus({0:{target:4},1:{target:4}}),{unanimous:true,target:4});
+  assert.deepEqual(game.wolfConsensus({0:{target:4},1:{target:5}}),{unanimous:false,target:null});
+  assert.equal(game.wolfTarget({0:{target:4},1:{target:5}}),4);
+  assert.equal(game.wolfTarget({0:{target:4},1:{target:4}}),4);
+  const randomTie=fixed(6,()=>.99);
+  assert.equal(randomTie.wolfTarget({0:{target:4},1:{target:5}}),5);
+});
+
+test('女巫药剂每晚只能用一种且药效与夜间结算一致',()=>{
+  const game=fixed();
+  const result=game.resolveNight({0:{target:4},1:{target:4},3:{save:true,poison:0}});
+  assert.equal(result.saved,true);
+  assert.equal(result.poisoned,null);
+  assert.equal(game.potions.save,false);
+  assert.equal(game.potions.poison,true);
+  assert.equal(game.players[4].alive,true);
+});
+
+test('守卫不能连续守同一人，毒药无视守护',()=>{
+  const game=fixed(12);
+  game.resolveNight({0:{target:8},1:{target:8},2:{target:8},3:{target:8},7:{target:8}},8);
+  assert.equal(game.players[8].alive,true);
+  game.nextNight();
+  game.resolveNight({0:{target:8},1:{target:8},2:{target:8},3:{target:8},7:{target:8},5:{poison:9}},8);
+  assert.equal(game.players[8].alive,false);
+  assert.equal(game.players[9].alive,false);
+  assert.equal(game.lastGuard,null);
+});
+
+test('猎人统一结算，不开枪时不产生公开消息，狼刀出局可开枪',()=>{
+  const skipped=fixed(12);
+  skipped.resolveNight({},6);
+  assert.equal(skipped.phase,'settle');
+  const step=skipped.settlementStep();
+  assert.equal(step.hunter,true);
+  skipped.resolveSettlement(null);
+  assert.equal(skipped.phase,'lastWords');
+  finishLastWords(skipped);
+  assert.equal(skipped.phase,'discussion');
+  assert.equal(skipped.logs.some(entry=>/猎人.*(放弃|选择是否|可选择)/.test(entry.text)),false);
+
+  const shot=fixed(12);
+  shot.resolveNight({},6);
+  shot.resolveSettlement(0);
+  assert.equal(shot.phase,'lastWords');
+  finishLastWords(shot);
+  assert.equal(shot.players[6].alive,false);
+  assert.equal(shot.players[0].alive,false);
+  assert.ok(shot.logs.some(entry=>/7 号猎人开枪带走 1 号/.test(entry.text)));
+});
+
+test('中毒猎人不触发开枪，其他出局者仍完成相同的结算步骤',()=>{
+  const game=fixed(12);
+  game.resolveNight({5:{poison:6}},null);
+  const step=game.settlementStep();
+  assert.deepEqual(step,{id:6,hunter:false});
+  game.resolveSettlement();
+  assert.equal(game.pendingHunter,null);
+  assert.equal(game.phase,'lastWords');
+  finishLastWords(game);
+  assert.equal(game.phase,'discussion');
+});
+
+test('首夜遗言按座位顺序，猎人带走者仅在猎人可遗言时获得遗言',()=>{
+  const game=fixed(12);
+  game.resolveNight({5:{target:0}},6);
+  settleAll(game,()=>0);
+  assert.equal(game.phase,'lastWords');
+  assert.deepEqual(game.lastWordsQueue,[0,6]);
+  finishLastWords(game);
+  assert.equal(game.phase,'discussion');
+  assert.deepEqual(game.speechHistory.map(entry=>entry.id),[0,6]);
+  assert.ok(game.speechHistory.every(entry=>entry.lastWords));
+});
+
+test('第二夜夜间出局没有遗言，单人死亡从下一位存活席位开始发言',()=>{
+  const game=fixed();
+  game.nextNight();
+  game.resolveNight({},2);
+  settleAll(game);
+  assert.equal(game.phase,'discussion');
+  assert.equal(game.lastWordsQueue.length,0);
+  assert.equal(game.speechOrder[0],3);
+});
+
+test('多人夜间出局后随机选择存活起始位，且首夜死者遗言在胜负后跳过',()=>{
+  const game=fixed(12,()=>0);
+  game.resolveNight({5:{poison:1}},6);
+  settleAll(game);
+  assert.equal(game.phase,'lastWords');
+  finishLastWords(game);
+  assert.equal(game.phase,'discussion');
+  assert.ok(game.alive().some(player=>player.id===game.speechOrder[0]));
+
+  const ended=fixed();
+  ended.players.forEach(player=>player.alive=player.role==='狼人');
+  ended.players.find(player=>player.role==='狼人').alive=false;
+  ended.resolveNight({},null);
+  settleAll(ended);
+  assert.equal(ended.phase,'ended');
+  assert.equal(ended.lastWordsQueue.length,0);
+});
+
+test('白天放逐者有遗言，结束游戏时省略遗言',()=>{
+  const game=fixed();
+  game.phase='discussion';
+  game.openVoting();
+  game.resolveVotes({0:2,1:2,2:1,3:1,4:1,5:1});
+  assert.equal(game.phase,'voting');
+  const result=game.resolveVotes({0:2,1:2,2:1,3:1,4:1,5:1});
+  assert.equal(result.eliminated,0);
+  settleAll(game);
+  assert.equal(game.phase,'lastWords');
+  assert.deepEqual(game.lastWordsQueue,[0]);
+
+  const ended=fixed();
+  ended.phase='discussion';
+  ended.players.forEach(player=>player.alive=player.role==='狼人');
+  ended.players.find(player=>player.role==='狼人').alive=false;
+  ended.openVoting();
+  ended.resolveVotes({});
+  assert.equal(ended.phase,'ended');
+});
+
+test('PK 候选人按当天顺序发言，候选人全员时可以互投且不能自投',()=>{
+  const game=fixed();
+  game.phase='discussion';
+  game.speechOrder=[0,1,2,3,4,5];
+  game.daySpeechOrder=[0,1,2,3,4,5];
+  game.openVoting();
+  const tie=game.resolveVotes({0:1,1:0,2:0,3:0,4:1,5:1});
+  assert.deepEqual(tie.pk,[0,1]);
+  assert.equal(game.canVote(0),false);
+  game.pk=[0,1,2,3,4,5];
+  for(let id=0;id<game.size;id++){
+    assert.equal(game.canVote(id),true);
+    assert.equal(game.legalTargets(id,'vote').includes(id+1),false);
+  }
+  game.pk=[0,1];
+  const result=game.resolveVotes({0:1,1:0,2:0,3:0,4:0,5:0});
+  assert.equal(result.eliminated,0);
+  assert.equal(game.phase,'settle');
+});
+
+test('狼队全灭获胜判定发生在猎人技能之后',()=>{
+  const game=fixed(12);
+  for(const player of game.players)if(player.role==='狼人'&&player.id!==0)player.alive=false;
+  game.players[6].alive=false;
+  game.players[6].cause='vote';
+  game.beginSettlement('night',[6],true);
+  settleAll(game,()=>0);
+  assert.equal(game.players[0].alive,false);
+  assert.equal(game.winner,'好人');
+  assert.equal(game.phase,'ended');
+  assert.equal(game.lastWordsQueue.length,0);
+});
+
+test('完整历史包含全部公开事件与发言并保留遗言标记',()=>{
+  const game=fixed(12);
+  for(let index=0;index<20;index++)game.event(`公开事件${index}`);
+  game.event('隐藏事件','private');
+  for(let index=0;index<125;index++)game.speechHistory.push({id:index%12,text:`公开发言${index}`,round:1,pk:index%2===0,lastWords:index===0});
+  const context=game.context(4,[],{includeAllSpeeches:true,includeAllPublicEvents:true});
+  assert.equal(context.publicEvents.length,21);
+  assert.equal(context.publicEvents[0].text,'第 1 夜开始。天黑请闭眼。');
+  assert.equal(context.publicEvents.at(-1).text,'公开事件19');
+  assert.equal(context.speeches.length,125);
+  assert.equal(context.speeches.at(-1).text,'公开发言124');
+  assert.equal(context.speeches[0].lastWords,true);
+  assert.ok(context.speeches.every(speech=>!Object.hasOwn(speech,'role')));
+});
+
+test('6 人与 12 人随机 AI 完整对局支持结算与遗言阶段',()=>{
+  for(const size of [6,12])for(let run=0;run<30;run++){
+    const game=new Game(size).start();
+    let steps=0;
+    while(!game.winner&&steps++<100){
+      if(game.phase==='night'){
+        const choices={};
+        for(const player of game.alive()){
+          if(player.role==='狼人'){
+            const targets=game.alive().filter(target=>target.role!=='狼人');
+            choices[player.id]={target:game.pick(targets)?.id??null};
+          }else if(player.role==='预言家'){
+            choices[player.id]={target:game.pick(game.legalTargets(player.id,'night').map(seat=>game.players[seat-1]))?.id??null};
+          }else if(player.role==='守卫'){
+            choices[player.id]={target:game.pick(game.legalTargets(player.id,'night').map(seat=>game.players[seat-1]))?.id??null};
+          }else if(player.role==='女巫')choices[player.id]={save:false,poison:null};
+        }
+        game.resolveNight(choices);
+      }else if(game.phase==='settle')settleAll(game);
+      else if(game.phase==='lastWords')finishLastWords(game);
+      else if(game.phase==='discussion'){
+        for(const id of [...game.speechOrder])if(game.players[id].alive)game.addSpeech(id,'讨论发言');
+        game.openVoting();
+      }else if(game.phase==='voting'){
+        if(game.pk)for(const id of game.pk)game.recordSpeech(id,'PK 发言');
+        const votes={};
+        for(const player of game.alive()){
+          const targets=game.legalTargets(player.id,'vote').map(seat=>seat-1);
+          votes[player.id]=game.pick(targets);
+        }
+        game.resolveVotes(votes);
+      }
+      assert.equal(game.players.length,size);
+    }
+    assert.ok(game.winner,`${size} 人对局应能结束`);
+    assert.equal(game.phase,'ended');
+  }
+});
+
+test('角色身份仅向有权限的玩家提供，预言家查验与女巫药剂保持私有',()=>{
+  const game=fixed(12);
+  game.knowledge[4]={0:'狼人'};
+  game.potions={save:false,poison:true};
+  for(let id=0;id<game.size;id++){
+    const context=game.context(id);
+    assert.ok(context.players.every(player=>!Object.hasOwn(player,'role')));
+    if(id!==4)assert.deepEqual(context.checks,{});
+    if(id!==5)assert.equal(context.potions,undefined);
+    if(id<4)assert.ok(Array.isArray(context.wolfTeammates));
+    else assert.equal(context.wolfTeammates,undefined);
+  }
+  assert.deepEqual(game.context(4).checks,{1:'狼人'});
+  assert.deepEqual(game.context(5).potions,{save:false,poison:true});
 });

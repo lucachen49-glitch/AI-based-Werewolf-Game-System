@@ -17,15 +17,16 @@ button:disabled{opacity:.4;cursor:not-allowed;transform:none!important;filter:no
 .connection-badge{display:inline-flex;align-items:center;gap:5px;line-height:1.6;color:var(--muted)}
 .connection-badge.online{color:var(--teal)}
 .connection-badge.offline{color:var(--red)}
-.connection-badge.connecting,.connection-badge.queued{color:var(--gold)}
+.connection-badge.connecting,.connection-badge.queued,.connection-badge.slow{color:var(--gold)}
 .connection-badge i{display:inline-block;flex:none;width:6px;height:6px;margin:0;border-radius:50%;background:currentColor}
 .connection-badge[aria-busy=true] i{width:10px;height:10px;border:2px solid currentColor;border-right-color:transparent;background:transparent;animation:connection-spin .8s linear infinite}
 .connection-badge.queued i{opacity:.55;animation-duration:1.6s}
 .seat-connection{margin-top:9px;padding:3px 7px;max-width:100%;border:1px solid currentColor;border-radius:6px;background:rgba(0,0,0,.12);font-size:9px}
 .agent-card[data-connection=testing]{border-color:var(--gold);box-shadow:0 0 0 1px rgba(232,191,120,.15)}
 .agent-card .agent-status{position:static;display:inline-flex;margin-top:12px;padding:3px 7px;border-radius:6px;background:rgba(0,0,0,.14);font-size:10px}
-.player.offline .player-avatar-wrap:after,.player.connecting .player-avatar-wrap:after,.player.queued .player-avatar-wrap:after{content:'';position:absolute;right:-2px;bottom:0;width:11px;height:11px;border:2px solid #1c3630;border-radius:50%;background:var(--red)}
-.player.connecting .player-avatar-wrap:after,.player.queued .player-avatar-wrap:after{background:var(--gold)}
+.player.offline .player-avatar-wrap:after,.player.connecting .player-avatar-wrap:after,.player.queued .player-avatar-wrap:after,.player.slow .player-avatar-wrap:after{content:'';position:absolute;right:-2px;bottom:0;width:11px;height:11px;border:2px solid #1c3630;border-radius:50%;background:var(--red)}
+.player.connecting .player-avatar-wrap:after,.player.queued .player-avatar-wrap:after,.player.slow .player-avatar-wrap:after{background:var(--gold)}
+.agent-error.agent-slow{color:var(--gold)}
 @keyframes connection-spin{to{transform:rotate(360deg)}}
 .table-scene,.table-scene.twelve{min-height:0;padding:20px 14px 14px;overflow:visible}
 .table-center{position:relative;inset:auto;transform:none;margin:0 auto 20px;width:auto;max-width:260px}

@@ -101,10 +101,15 @@ function eliminationInfo(p){
 function seatEffectClass(p){return (!p.alive?' eliminated-'+eliminationInfo(p).kind+' ':'')+(game.phase==='ended'&&((p.role==='狼人')===(game.winner==='狼人'))?' winner-seat ':'')+(spectatorPrefs.perspective==='god'&&nightFocus?(nightFocus.actors.includes(p.id)?' action-actor ':'')+(nightFocus.target===p.id?' action-target action-'+nightFocus.kind+' ':''):'')+(dealState?.stage==='reveal'&&p.id<dealState.revealed?' identity-revealed ':'')}
 function seatDecorations(p){
   const eliminated=eliminationInfo(p),mark=eliminated?'<span class="elimination-mark"><i aria-hidden="true">'+eliminated.icon+'</i>'+eliminated.label+'</span>':'';
-  const choice=game.phase==='night'&&spectatorPrefs.perspective==='god'&&wolfPresentation?.round===game.round?wolfPresentation.states[p.id]:null;
+  const wolf=game.phase==='night'&&spectatorPrefs.perspective==='god'&&wolfPresentation?.round===game.round;
+  const choice=wolf?wolfPresentation.states[p.id]:null;
   if(choice){
-    const label=choice.status==='choosing'?'正在选刀':choice.status==='selected'?'提议袭击 '+(choice.target+1)+' 号':choice.status==='abstained'?'放弃袭击':'未形成有效选择';
-    return '<div class="seat-overlay" role="status" aria-label="'+(p.id+1)+' 号狼人选刀状态">'+mark+'<span class="vote-hint wolf-choice vote-'+(choice.status==='choosing'?'choosing':'revealed')+'">'+label+'</span></div>';
+    const label=item=>item?.status==='choosing'?'正在确认':item?.status==='selected'?'选择 '+(item.target+1)+' 号':item?.status==='abstained'?'放弃袭击':'无有效选择';
+    const first=wolfPresentation.firstRound?.[p.id];
+    const rounds=wolfPresentation.confirming
+      ?'<span class="vote-hint wolf-choice vote-revealed">首轮 '+label(first)+'</span><span class="vote-hint wolf-choice vote-'+(choice.status==='choosing'?'choosing':'revealed')+'">二轮 '+label(choice)+'</span>'
+      :'<span class="vote-hint wolf-choice vote-'+(choice.status==='choosing'?'choosing':'revealed')+'">首轮 '+label(choice)+(wolfPresentation.finalChoices?' · 已定':'')+'</span>';
+    return '<div class="seat-overlay" role="status" aria-label="'+(p.id+1)+' 号狼人两轮选刀状态">'+mark+rounds+'</div>';
   }
   const status=votePresentation?.states[p.id];
   if(!status)return mark?'<div class="seat-overlay">'+mark+'</div>':'';

@@ -25,7 +25,8 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
     {role:'user',content:'next'}
   ];
   const before=JSON.stringify(messages);
-  for(const effort of ['high','xhigh',undefined]){
+  assert.equal(Agent.normalizeReasoningEffort('medium'),'medium');
+  for(const effort of ['medium','high','xhigh',undefined]){
     const body=Agent.responsesBody({model:' model ',messages,reasoning_effort:effort,temperature:.75,max_tokens:350});
     assert.deepEqual(body,{
       model:'model',

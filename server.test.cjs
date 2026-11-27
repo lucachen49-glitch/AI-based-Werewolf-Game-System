@@ -68,11 +68,14 @@ test('真实 HTTP 转发不依赖供应商 CORS，模型密钥独立，响应保
   const {post,seen}=await fixture(t);
   const first=await post();assert.equal(first.status,200);
   assert.equal(first.headers.get('cache-control'),'no-store');
-  assert.deepEqual(await first.json(),{id:'mock',choices:[{index:0,message:{role:'assistant',content:'OK'},finish_reason:'stop'}],usage:{prompt_tokens:2,completion_tokens:3,total_tokens:5}});
+  const {connection:firstConnection,...firstBody}=await first.json();
+  assert.deepEqual(firstBody,{id:'mock',choices:[{index:0,message:{role:'assistant',content:'OK'},finish_reason:'stop'}],usage:{prompt_tokens:2,completion_tokens:3,total_tokens:5}});
+  assert.equal(firstConnection.ok,true);assert.equal(firstConnection.mode,'json');
   assert.equal(seen[0].url,'/v1/responses');
   assert.equal(seen[0].headers.authorization,'Bearer test-secret-only');
   assert.equal(seen[0].headers.origin,undefined);
-  assert.deepEqual(seen[0].body,{model:'gpt-6-astra',input:[{role:'user',content:[{type:'input_text',text:'Reply with OK.'}]}],max_output_tokens:350,stream:false,store:false});
+  assert.deepEqual(seen[0].body,{model:'gpt-6-astra',input:[{role:'user',content:[{type:'input_text',text:'Reply with OK.'}]}],max_output_tokens:350,stream:true,store:false});
+  assert.equal(seen[0].headers.accept,'text/event-stream');
   const second=await post({model:'another-model',apiKey:'another-key'});assert.equal(second.status,200);
   assert.equal(seen[1].body.model,'another-model');assert.equal(seen[1].headers.authorization,'Bearer another-key');assert.equal(seen[1].body.max_output_tokens,350);assert.equal(seen[1].body.reasoning,undefined);
   const speech=await post({maxTokens:4000});assert.equal(speech.status,200);assert.equal(seen[2].body.max_output_tokens,350);assert.equal(seen[2].body.reasoning,undefined);
@@ -278,16 +281,16 @@ test('6/12 人自然讲解 MP3 可播放下载及 HEAD 查询，制作脚本和�
 
 test('推理强度缺省和显式值按配置转发，其他值在提交前拒绝', async t => {
   const {post, seen} = await fixture(t);
-  for (const [body, expected] of [[{purpose:'game-action'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'xhigh'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'high'}, 'high']]) {
+  for (const [body, expected] of [[{purpose:'game-action'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'xhigh'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'high'}, 'high'], [{purpose:'game-action',reasoningEffort:'medium'}, 'medium']]) {
     assert.equal((await post(body)).status, 200);
     assert.equal(seen.at(-1).body.reasoning.effort, expected);
   }
-  for (const value of ['low', 'medium', 'max', '', null, 1, {}, ['xhigh']]) {
+  for (const value of ['low', 'max', '', null, 1, {}, ['xhigh']]) {
     const response = await post({reasoningEffort:value});
     assert.equal(response.status, 400);
     assert.equal((await response.json()).error.code, 'INVALID_REASONING_EFFORT');
   }
-  assert.equal(seen.length, 3);
+  assert.equal(seen.length, 4);
 });
 
 test('供应商拒绝 xhigh 时保留明确错误且不泄露凭据、不自动降级或重发', async t => {
@@ -960,3 +963,103 @@ test('每局 Agent 请求与安全上下文分别保存，可独立下载',async
   assert.equal(wrongMethod.status,405);assert.equal(wrongMethod.headers.get('allow'),'GET, HEAD');
 });
 
+
+// Connection tests: streamed first event, fallbacks, two-stage timeouts, logging and socket reuse.
+function sse(res,events,{end=false}={}){
+  res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache'});
+  for(const event of events)res.write(`event: ${event.type||'message'}\ndata: ${JSON.stringify(event)}\n\n`);
+  if(end)res.end();
+}
+
+test('连接测试使用流式请求，收到首个 Responses 事件即成功并断开，不等待完整回答',async t=>{
+  let closed;const providerClosed=new Promise(resolve=>closed=resolve);const entries=[];
+  const {post,seen}=await fixture(t,{agentLogger:entry=>entries.push(entry),handler(req,res){
+    res.on('close',closed);
+    // The model would keep reasoning for a long time; only the first event is needed.
+    sse(res,[{type:'response.created',response:{id:'resp_stream',status:'in_progress'}}]);
+  }});
+  const begin=Date.now();
+  const response=await post({purpose:'connection-test',reasoningEffort:'medium',seat:4});
+  assert.equal(response.status,200);
+  const data=await response.json();
+  assert.equal(data.connection.ok,true);assert.equal(data.connection.mode,'stream');
+  assert.ok(Number.isInteger(data.connection.firstEventMs));assert.ok(data.connection.headersMs<=data.connection.firstEventMs);
+  assert.ok(Date.now()-begin<2000);
+  assert.equal(seen[0].body.stream,true);assert.deepEqual(seen[0].body.reasoning,{effort:'medium'});
+  assert.equal(seen[0].body.max_output_tokens,350);assert.equal(seen[0].body.text,undefined);
+  await bounded(providerClosed);
+  const entry=entries.at(-1);
+  assert.equal(entry.event,'response_received');assert.equal(entry.task,'connection-test');assert.equal(entry.seat,4);
+  assert.equal(entry.connectionMode,'stream');assert.equal(entry.reasoningEffort,'medium');assert.equal(entry.model,'gpt-6-astra');
+  assert.match(entry.endpointHost,/^127\.0\.0\.1:\d+$/);
+  assert.doesNotMatch(JSON.stringify(entries),/test-secret-only/);
+});
+
+test('连接测试流式错误事件、非 Responses 流和提前结束分别给出明确错误',async t=>{
+  const cases=[
+    [[{type:'error',error:{code:'invalid_api_key',message:'test-secret-only'}}],'AUTH_FAILED'],
+    [[{type:'response.failed',response:{error:{code:'model_not_found',message:'no model'}}}],'MODEL_UNAVAILABLE'],
+    [[{object:'chat.completion.chunk',choices:[]}],'RESPONSES_UNSUPPORTED'],
+    [[],'INVALID_RESPONSE']
+  ];
+  for(const [events,expected] of cases)await t.test(expected,async t=>{
+    const {post}=await fixture(t,{handler(req,res){
+      if(events[0]?.object){res.writeHead(200,{'Content-Type':'text/event-stream'});res.end(`data: ${JSON.stringify(events[0])}\n\n`);return;}
+      sse(res,events,{end:true});
+    }});
+    const response=await post({purpose:'connection-test'});
+    assert.ok(response.status>=400);
+    const data=await response.json();assert.equal(data.error.code,expected);
+    assert.doesNotMatch(JSON.stringify(data),/test-secret-only/);
+  });
+});
+
+test('供应商拒绝 stream 参数时改用非流式请求重试一次，并接受仅达到测试输出预算的结果',async t=>{
+  const {post,seen}=await fixture(t,{handler(req,res,entry){
+    if(entry.body.stream){res.writeHead(400,{'Content-Type':'application/json'});res.end(JSON.stringify({error:{code:'unsupported_parameter',param:'stream',message:'stream is not supported'}}));return;}
+    res.writeHead(200,{'Content-Type':'application/json'});
+    res.end(JSON.stringify({id:'resp_budget',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},output:[]}));
+  }});
+  const response=await post({purpose:'connection-test',reasoningEffort:'high'});
+  assert.equal(response.status,200);
+  const data=await response.json();assert.equal(data.connection.mode,'fallback');
+  assert.deepEqual(seen.map(s=>s.body.stream),[true,false]);
+  assert.deepEqual(seen[1].body.reasoning,{effort:'high'});
+});
+
+test('连接测试区分连不上与响应慢：响应头之后超时提示已连通',async t=>{
+  const {post}=await fixture(t,{connectionTimeoutMs:80,handler(req,res){res.writeHead(200,{'Content-Type':'application/json'});res.write('{');}});
+  const response=await post({purpose:'connection-test'});
+  assert.equal(response.status,504);
+  const {error}=await response.json();
+  assert.equal(error.code,'UPSTREAM_TIMEOUT');assert.equal(error.stage,'response');assert.match(error.message,/已连通.*响应较慢/);
+});
+
+test('连接阶段单次超时后独立重试，最终提示连接超时及尝试次数',async t=>{
+  const entries=[];
+  const {post,seen}=await fixture(t,{connectionConnectTimeoutMs:60,connectionTimeoutMs:2000,connectionRetryDelayMs:0,agentLogger:entry=>entries.push(entry),handler(){/* never answers */}});
+  const response=await post({purpose:'connection-test',seat:2});
+  assert.equal(response.status,504);
+  const {error}=await response.json();
+  assert.equal(error.code,'UPSTREAM_TIMEOUT');assert.equal(error.stage,'connect');assert.match(error.message,/2 次尝试/);
+  await eventually(()=>seen.length===2);
+  assert.equal(entries.at(-1).event,'failed');assert.equal(entries.at(-1).stage,'connect');assert.equal(entries.at(-1).attempts,2);assert.equal(entries.at(-1).seat,2);
+});
+
+test('连接测试在进入上游前失败也写入诊断日志',async t=>{
+  const entries=[];
+  const {post}=await fixture(t,{agentLogger:entry=>entries.push(entry)});
+  assert.equal((await post({purpose:'connection-test',seat:13})).status,400);
+  assert.equal(entries.length,1);assert.equal(entries[0].task,'connection-test');assert.equal(entries[0].code,'INVALID_CONFIG');
+});
+
+test('连续非流式连接测试复用保持连接的套接字',async t=>{
+  const ports=[];
+  const {post}=await fixture(t,{handler(req,res){
+    ports.push(req.socket.remotePort);
+    res.writeHead(200,{'Content-Type':'application/json',Connection:'keep-alive'});
+    res.end(JSON.stringify(agentResponse('OK')));
+  }});
+  for(let i=0;i<3;i++)assert.equal((await post({purpose:'connection-test'})).status,200);
+  assert.equal(ports.length,3);assert.equal(new Set(ports).size,1);
+});

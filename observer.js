@@ -41,8 +41,12 @@
       const wolfChoices=r.wolfChoices.map(c=>({...c})),counts={};
       for(const c of wolfChoices)if(c.status==='selected')counts[c.target]=(counts[c.target]||0)+1;
       const max=Math.max(0,...Object.values(counts)),tied=Object.values(counts).filter(n=>n===max).length>1;
-      const detail=wolfChoices.map(c=>`${seat(c.id)}狼人${c.status==='selected'?`提议袭击 ${seat(c.target)}`:c.status==='abstained'?'放弃袭击':'未形成有效选择'}`).join('，')+'。';
-      return {...common,kind:'wolf',target:r.victim,wolfChoices,godText:detail+(r.victim==null?'狼人没有形成有效的袭击目标。':`${tied?'票数相同，按规则随机确定':'狼队最终确定'}今晚袭击 ${seat(r.victim)}。最终是否出局，还要看守护和用药。`)};
+      const describe=choices=>choices.map(c=>`${seat(c.id)}狼人${c.status==='selected'?`选择袭击 ${seat(c.target)}`:c.status==='abstained'?'放弃袭击':'未形成有效选择'}`).join('，');
+      const firstRound=r.firstRoundChoices?`第一轮选择。${describe(r.firstRoundChoices)}。`:'';
+      const roundLabel=r.wolfRound===2?'第二轮最终选择。':'第一轮独立选择。';
+      const detail=describe(wolfChoices);
+      const decision=r.victim==null?'狼人没有形成有效的袭击目标。':`${r.wolfRound===2&&tied?'第二轮票数相同，按规则随机确定':'狼队确定'}今晚袭击 ${seat(r.victim)}。最终是否出局，还要看守护和用药。`;
+      return {...common,kind:'wolf',target:r.victim,wolfChoices,firstRoundChoices:r.firstRoundChoices?.map(c=>({...c})),godText:firstRound+roundLabel+detail+'。'+decision};
     }
     if(role==='预言家')return {...common,kind:'seer',target:r.seerCheck?.target??null,godText:r.seerCheck?`${seat(actor)}预言家查验 ${seat(r.seerCheck.target)}，结果是${r.seerCheck.result}。这条信息只有预言家知道。`:`${seat(actor)}预言家本夜未完成有效查验。`};
     if(role==='女巫'){
@@ -73,8 +77,8 @@
     else if(/进入 PK/.test(text)){kind='pk';detail=' 平票玩家补充发言，随后由其他存活玩家再次投票。'}
     else if(/无人被放逐/.test(text)){kind='exile';detail=' 本轮没有玩家因投票出局。'}
     else if(/被投票放逐/.test(text)){kind='exile';detail=' 接下来会先处理出局技能和胜负，再决定是否进入下一夜。'}
-    else if(/猎人(?:带走|放弃)/.test(text)){kind='hunter-result';detail=' 猎人技能已结算，接下来继续检查胜负。'}
-    else if(/猎人.*(?:技能|开枪)/.test(text)){kind='hunter';detail=' 猎人可以选择一名存活玩家带走，也可以放弃。'}
+    else if(/猎人开枪带走/.test(text)){kind='hunter-result';detail=' 出局结算继续进行。'}
+    else if(/出局结算开始/.test(text)){kind='exile';detail=' 正在按统一流程结算出局状态与技能。'}
     else if(/阵营获胜/.test(text)){kind='winner';detail=' 本局结束，所有玩家身份现已揭晓。'}
     if(/^票型/.test(text))return null;
     return {kind,round:log.round,phase:log.phase,publicText:text+detail,godText:text+detail+(night&&!night.narrated?' '+nightSummary(night):''),...(night?{result:night}:{})};
