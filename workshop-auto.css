@@ -282,8 +282,12 @@
   border-color: #d0a76a;
 }
 @media (max-width: 720px) {
-  .auto-results .auto-finding-card { padding: 12px; }
-  .auto-finding-actions button { width: 100%; }
+  .auto-results .auto-finding-card {
+    padding: 12px;
+  }
+  .auto-finding-actions button {
+    width: 100%;
+  }
 }
 
 .auto-character-groups {

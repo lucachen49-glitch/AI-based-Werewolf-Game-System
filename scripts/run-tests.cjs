@@ -5,9 +5,10 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
-const testFiles = fs.readdirSync(projectRoot, { withFileTypes: true })
-  .filter(entry => entry.isFile() && entry.name.endsWith('.test.cjs'))
-  .map(entry => entry.name)
+const testFiles = fs
+  .readdirSync(projectRoot, { withFileTypes: true })
+  .filter((entry) => entry.isFile() && entry.name.endsWith('.test.cjs'))
+  .map((entry) => entry.name)
   .sort();
 
 if (testFiles.length === 0) {
@@ -22,23 +23,23 @@ if (testFiles.length === 0) {
   const child = spawn(process.execPath, ['--test', ...testFiles], {
     cwd: projectRoot,
     stdio: ['inherit', 'pipe', 'pipe'],
-    windowsHide: true
+    windowsHide: true,
   });
 
   for (const stream of [child.stdout, child.stderr]) {
-    stream.on('data', chunk => {
+    stream.on('data', (chunk) => {
       log.write(chunk);
       (stream === child.stdout ? process.stdout : process.stderr).write(chunk);
     });
   }
 
-  child.on('error', error => {
+  child.on('error', (error) => {
     log.write(`Test runner failed to start: ${error.stack || error}\n`);
     process.stderr.write(`Test runner failed to start: ${error.message}\n`);
     process.exitCode = 1;
   });
 
-  child.on('close', code => {
+  child.on('close', (code) => {
     log.end(() => {
       if (code !== 0 && process.exitCode === undefined) {
         process.exitCode = code ?? 1;

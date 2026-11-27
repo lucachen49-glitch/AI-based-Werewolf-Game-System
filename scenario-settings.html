@@ -1,24 +1,456 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>剧本工坊 · 夜幕之下</title><link rel="stylesheet" href="scenario-settings.css"><link rel="stylesheet" href="character-intro.css"><link rel="stylesheet" href="workshop-auto.css"></head>
-<body><header><a href="/">← 返回游戏</a><span>夜幕之下 / STORY WORKSHOP</span></header>
-<main><div class="heading"><div><small id="roomHint">6／12 人间 · 剧情模式</small><h1>每一场暗夜，都有一个故事。</h1><p>写下庄园的往事，让每位玩家带着各自的秘密入席。狼人杀身份仍由游戏随机分配。</p></div><span class="seal">叙事工坊</span></div>
-<div id="notice" class="notice" role="status" aria-live="polite">正在读取本地剧本…</div>
-<div id="restorePanel" class="notice hidden"><span id="restoreMessage"></span><div class="row wrap"><button id="retryRestore" class="hidden">重试恢复</button><button id="restoreCopy" class="hidden">恢复为独立草稿</button><button id="useLatest" class="hidden">继续使用最新版本</button></div></div>
-<p id="draftStatus" class="hint" role="status"></p>
-<section id="automaticWorkshop" class="auto-workshop"><h2>自动制作剧情视频</h2><div id="autoSelectors" class="auto-selectors"></div><ol id="autoStages" class="auto-stages" aria-label="自动制作进度"></ol><div class="auto-actions"><button id="autoStart" type="button" class="primary">开始制作</button><button id="autoPause" type="button" hidden>暂停制作</button><button id="autoContinue" type="button" hidden>继续制作／查询</button><button id="autoCancel" type="button" hidden>取消后续制作</button><button id="autoRefresh" type="button">刷新进度</button></div><p id="autoError" role="alert"></p><p id="autoMessage" role="status" aria-live="polite"></p><details id="keyAssetsSection" hidden><summary>关键物品与场景定妆</summary><p class="hint">为当前剧本中的关键场景与道具保存可复用的参考图。系统也会在自动制作时识别并整理跨镜头需要保持一致的视觉素材。确认后可用于关联镜头，旧图和历史任务保留。</p><div id="keyAssetsControls"></div><div id="keyAssetsList" class="auto-gallery"></div><button id="applyKeyAssets" type="button">将已确认物品加入所选镜头并保存为新版本</button></details><div id="autoResults" class="auto-results" hidden><p id="autoScope"></p><div id="autoVisualAssetBackfill" class="auto-backfill" hidden></div><p id="autoCapabilities" class="hint"></p><details open><summary>AI 检查结果</summary><div id="autoReports" class="auto-report-list"></div></details><details id="autoCharactersSection" open hidden><summary>人物定妆与关键视觉素材核对</summary><div class="auto-character-groups"><section><h3>人物定妆</h3><div id="autoCharacters" class="auto-gallery"></div></section><section><h3>关键场景与道具定妆</h3><div id="autoVisualAssets" class="auto-gallery"></div></section></div></details><details id="autoFramesSection" open hidden><summary>分镜与级联关系</summary><div id="autoFrames"></div></details><details id="autoShotsSection" hidden><summary>实际视频镜头</summary><div id="autoShots"></div></details><section id="autoFinal" hidden><h3>完整成片</h3><video id="autoFinalVideo" controls playsinline preload="metadata"></video><a id="autoDownload" download="血月停战宴-双语成片.mp4">下载 MP4</a><a id="autoSrt" download="血月停战宴-双语字幕.srt">下载双语字幕</a></section><label id="autoAuthorization" class="auto-auth" hidden><input id="autoAuthorize" type="checkbox"><span id="autoChargeScope"></span></label><div class="auto-actions"><button id="autoConfirm" type="button" class="primary" hidden>确认并继续</button><button id="autoSkipChecks" type="button" hidden>手动跳过 AI 检查失败</button><button id="autoAcceptShot" type="button" hidden>已核对，接受此镜头继续</button></div></div></section><details id="workshopAdvanced" class="workshop-advanced"><summary>高级编辑 · 剧本、参考素材、字幕与单镜重做</summary><ol id="workshopSteps" class="workshop-steps" aria-label="制作进度"></ol>
-<div class="layout"><section class="panel editor"><div class="section-title"><h2>01 / 编写剧本</h2><div class="row wrap"><button id="sample">载入 6 人示例</button><button id="bloodMoonSample">载入《血月停战宴》</button></div></div>
-<label>房间人数<select id="roomSize"><option value="6">6 人间</option><option value="12">12 人间</option></select></label><div class="row"><label class="grow">本机剧本库<select id="library"><option value="">新建剧本</option></select></label><button id="newStory">新建</button></div>
-<label>原始剧本<textarea id="source" rows="7" maxlength="16000" placeholder="粘贴你的故事：时代、庄园、各位人物及彼此的关系。也可以导入 UTF-8 TXT 文件。"></textarea></label>
-<div class="row wrap"><label class="file-button">导入 TXT<input id="import" type="file" accept=".txt,text/plain"></label><label class="grow">用于整理剧本的 Agent<select id="organizer"></select></label><button id="organizerRefresh" type="button">刷新 Agent 配置</button><label id="organizerTemporaryKeyLabel" class="grow" hidden>本次临时 API 密钥<input id="organizerTemporaryKey" type="password" autocomplete="off" spellcheck="false" placeholder="仅在当前页面使用，不保存到浏览器"></label><button id="prepare" class="primary">整理为六人剧本</button></div><p id="organizerStatus" class="hint" role="status"></p><a id="organizerConfigLink" class="button-link" href="/#agents">返回游戏 Agent 配置</a>
-<p class="hint">只使用你明确选择的 Agent 整理；不自动调用其他席位。也可直接编辑下方内容，无需聊天接口。</p>
-<div id="warnings" class="hint"></div><hr><label>剧本名称<input id="title" maxlength="60"></label><label>公开背景<textarea id="background" rows="4" maxlength="1800"></textarea></label>
-<h3 id="characterTitle">6 位人物</h3><p class="hint">姓名只在本次剧情对局中替换。公开关系所有人可见；个人秘密用于故事动机与可选核对，不代表本局阵营。</p><div id="characters" class="characters"></div>
-<div class="section-title"><h3 id="sceneTitle">开场分镜 / 电影镜头</h3><button id="expand60">按剧情扩展镜头草稿</button></div><label>统一视觉设定<textarea id="visualGuide" rows="3" maxlength="1600" placeholder="同一建筑的空间关系、人物外观服饰、光线、道具和行进方向。"></textarea></label><p class="hint">画面与解说只写公开信息。视频不揭露个人秘密，也不固定狼人杀身份。电影剧本每镜 1—15 秒，可编辑旁白、出场人物、人物对白与镜头衔接；制作前检查总时长、角色覆盖和说话人数。</p><section id="referenceLibrary" class="reference-library"><h3>参考素材库</h3><p class="hint">导入人物、场景、服装或道具图片，再在每镜选择。仅保存至本机，提交视频时使用所选图片。每张不超过 8MB。</p><div class="row wrap"><label>素材名称<input id="referenceLabel" maxlength="80" placeholder="例如：暮鸦宴厅东窗"></label><label>素材用途<select id="referenceKind"><option value="scene">场景</option><option value="character">人物</option><option value="costume">服装</option><option value="prop">道具</option></select></label><label>图片文件<input id="referenceFile" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="referenceUpload" type="button">导入参考图</button></div><p id="referenceStatus" role="status" class="hint"></p><div id="referenceLibraryPreview" class="reference-previews"></div></section><div id="scenes"></div>
-<section id="preflightPanel" class="preflight-panel" hidden><h3>制作前检查</h3><p class="hint">修正下方规则问题后可继续制作。AI 核对可按需使用；生成后的画面、声音及镜头衔接需逐镜预览。</p><div id="preflight" role="status"></div><button id="revisionDraft" type="button">复制为独立修订草稿</button></section>
-<label class="check"><input id="confirmed" type="checkbox">我已检查人物、公开分镜及秘密，没有固定本局阵营或修改胜利规则。</label>
-<div class="row wrap"><button id="save" class="primary">保存剧本版本</button><span id="version" class="hint">未保存</span></div></section>
-<aside><section id="rehearsalPanel" class="panel rehearsal-panel" hidden aria-hidden="true" data-legacy-only="true"><h2>历史本地预演（兼容查看）</h2><p class="hint">先听故事，再决定正式补做哪些镜头。只使用本地已有画面、免费临时配音、字幕和配乐，不调用付费图片或视频模型。</p><div id="previewTimeline" class="preview-timeline"></div><div class="row wrap"><button id="refreshAssets">重新读取旧素材</button><button id="makeRehearsal" class="primary">制作本地预演</button><button id="resumeRehearsal" hidden>继续历史预演处理</button></div><p id="rehearsalRequirement" class="hint"></p><p id="rehearsalMessage" class="hint" role="status" aria-live="polite">尚未制作预演。</p><ol id="rehearsalProgress" class="rehearsal-progress"></ol><video id="rehearsalVideo" hidden controls playsinline preload="metadata"></video><a id="downloadRehearsal" hidden download="血月停战宴-叙事预演.mp4">下载当前预演</a><div id="rehearsalConfirmation" class="rehearsal-confirmation"><p id="rehearsalWatchStatus" class="hint" role="status" aria-live="polite"></p><ul id="rehearsalBlockers" class="hint"></ul><details id="rehearsalReviewPanel"><summary>逐镜衔接检查 <span id="rehearsalReviewCount"></span></summary><p class="hint">观看后，请核对空间、站位、视线与动作是否承接，再逐项勾选。这里只记录你的检查，不会自动保证画面连续。</p><div id="rehearsalReviewList"></div></details></div><button id="confirmRehearsal" class="primary wide" disabled>完整观看历史预演后确认</button><details><summary>从旧任务复制图片（待重新确认）</summary><p class="hint">外观相同的人物图可复用。各镜选择的旧分镜图片也会复制；旧视频不算作新版正式对白。来源保留，原任务不会改变。</p><div id="reuseCharacters" class="reuse-characters"></div><button id="importOldArt" disabled>复制选中图片为待确认素材</button></details></section><section class="panel art-panel"><h2>02 / 人物与分镜</h2><p class="hint">先按房间人数制作人物定妆照，检查后整组确认；再依剧本镜头数制作并确认分镜起始图。仅使用公开设定，参考图可以改善人物一致性，动态变形仍需逐镜检查。</p><p id="imageConfigStatus" class="hint">正在读取图片配置…</p><a href="/image-settings.html" target="_blank" rel="noopener">管理独立图片密钥 ↗</a><div class="row wrap art-actions"><button id="createArt" class="primary">制作人物定妆照</button><button id="resumeArt" class="hidden">继续未完成图片</button></div><p id="artRequirement" class="hint"></p><div id="artActivity" class="art-activity hidden" role="status" aria-live="polite"><strong id="artActivityTitle"></strong><p id="artActivityDetail"></p><progress id="artOverall" max="6" value="0"></progress></div><button id="retryJobs" class="hidden">重新查询制作进度（不重新生成）</button><p id="artMessage" class="hint" role="status">保存并确认电影剧本后，才可制作图片。</p><h3>人物定妆 <span id="characterCount"></span></h3><div id="characterArt" class="art-grid"></div><button id="confirmCharacters" class="wide" disabled>确认人物</button><hr><div class="section-title"><h3>分镜起始图 <span id="frameCount"></span></h3><button id="generateFrames" disabled>制作分镜图片</button></div><div id="frameArt" class="art-grid frames"></div><button id="confirmFrames" class="wide" disabled>确认全部分镜</button><details id="artHistory"><summary>历史图片与制作提示词</summary><div id="artHistoryItems" class="hint">暂无历史图片</div></details></section><section class="panel intro-panel"><h2>电影人物登场介绍</h2><p class="hint">仅显示姓名与公开剧情身份；不显示狼人杀身份或私人秘密。建议来自出场名单，需要逐镜对照画面人工确认，并避开面部和底部对白字幕。</p><label class="intro-confirm"><input id="introEnabled" type="checkbox">启用电影姓名条</label><label>预览与制作范围<select id="introSource"><option value="">当前剧本镜头（用于视频成片）</option></select></label><div class="intro-controls"><button id="suggestIntros" type="button">建议首次登场标记</button><button id="addIntro" type="button">添加介绍</button></div><div id="introMarkers"></div><p id="introIssues" class="hint intro-errors"></p><div class="intro-screen"><video id="introMovie" controls playsinline preload="metadata"></video><div id="introNameplate" class="intro-nameplate" hidden><strong id="introName"></strong><span id="introIdentity"></span></div></div><label>姓名条效果预览 <span id="introClock">0.0 秒</span><input id="introScrub" class="intro-time" type="range" min="0" max="90" step="0.1" value="0"></label><label class="intro-confirm"><input id="introConfirm" type="checkbox">已对照画面，核对全部人物的首次登场、姓名、公开剧情身份和字幕避让</label><p class="hint">姓名条设置随剧本保存。已有成片可在本地合成为独立副本，完成预览后选择采用。</p><button id="createIntroCopy" type="button" class="primary wide" disabled>复用已有成片，制作人物介绍副本</button><p id="introCopyMessage" role="status" class="hint"></p><button id="resumeIntroCopy" hidden type="button">继续本地合成／查询</button><video id="introCopyVideo" hidden controls playsinline preload="metadata"></video><div class="intro-delivery"><a id="downloadIntroCopy" hidden download="血月停战宴-人物介绍预览.mp4">下载介绍副本</a><button id="acceptIntroCopy" disabled type="button">完整观看后采用此副本</button></div></section><section class="panel"><h2>视频接口设置</h2><p class="hint">独立的视频专用密钥，使用 Windows 当前用户加密保存在本机，不读取玩家或图片密钥。</p><label>接口地址<input id="provider" type="url" value="https://api-fast.hualong-ai.com" autocomplete="off"></label><label>模型<input id="model" value="grok-imagine-video-1.5" readonly></label><label>视频专用密钥<input id="videoKey" type="password" autocomplete="new-password" placeholder="已保存时留空即可保留"></label><div class="row wrap"><button id="saveConfig">加密保存</button><button id="checkConfig">检查鉴权</button></div><p id="configStatus" class="hint"></p></section>
-<section class="panel"><h2>独立剧情视频</h2><p class="hint"><span id="productionHint">独立生成剧情视频，完成后即可预览和下载；采用为游戏开场是可选操作。总时长由镜头时长自动计算，单镜 1—15 秒。费用以华龙账户为准。</span></p><label>本机视频任务<select id="videoHistory"><option value="">暂无任务</option></select></label><button id="generate" class="primary wide">生成独立剧情视频</button><p id="jobMessage" class="hint">保存并确认剧本后开始制作。</p><div id="jobs"></div><button id="resume" class="hidden">继续查询原任务</button>
-<video id="preview" class="hidden" controls playsinline preload="metadata"></video><label id="acceptLabel" class="check hidden"><input id="acceptCheck" type="checkbox" disabled>已完整预览，确认画面、声音及公开信息无误。</label><button id="accept" class="primary wide hidden" disabled>采用这版作为游戏开场（可选）</button><a id="downloadVideo" class="button-link" hidden download="剧情视频.mp4">下载 MP4</a><p class="hint">视频可独立预览和下载。采用操作仅用于把选定版本绑定为游戏开场，开始游戏不依赖视频是否生成。修改剧本后需要为新版本重新制作。</p></section><section class="panel" id="subtitlePanel" hidden><h2>双语字幕与主题片尾</h2><p class="hint">先完整观看原片，再逐句核对声音和字幕时间。合成使用已完成的视频，不提交生成请求。片尾追加约 4 秒。</p><div id="subtitleRows"></div><label>中文主题<input id="subtitleTitleZh" maxlength="100"></label><label>English title<input id="subtitleTitleEn" maxlength="100"></label><label>中文悬念<input id="subtitleHookZh" maxlength="100"></label><label>English hook<input id="subtitleHookEn" maxlength="100"></label><button id="subtitleCreate" type="button">本地合成双语副本</button><p id="subtitleMessage" role="status" class="hint"></p><div id="subtitleCopies"></div></section></aside></div></details></main>
-<dialog id="artZoom"><button id="closeArtZoom" aria-label="关闭大图">关闭 ×</button><img id="artZoomImage" alt="制作图片放大预览"><p id="artZoomCaption"></p></dialog>
-<script src="manor.js"></script><script src="story-art-ui.js"></script><script src="character-intros.js"></script><script src="scenario.js"></script><script src="workshop-preview.js"></script><script src="workshop-state.js"></script><script src="workshop-flow.js"></script><script src="workshop-preview-ui.js"></script><script src="scenario-review-ui.js"></script><script src="character-intro-ui.js"></script><script src="story-subtitle-ui.js"></script><script src="workshop-auto-ui.js"></script><script src="scenario-settings.js"></script></body></html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>剧本工坊 · 夜幕之下</title>
+    <link rel="stylesheet" href="scenario-settings.css" />
+    <link rel="stylesheet" href="character-intro.css" />
+    <link rel="stylesheet" href="workshop-auto.css" />
+  </head>
+  <body>
+    <header><a href="/">← 返回游戏</a><span>夜幕之下 / STORY WORKSHOP</span></header>
+    <main>
+      <div class="heading">
+        <div>
+          <small id="roomHint">6／12 人间 · 剧情模式</small>
+          <h1>每一场暗夜，都有一个故事。</h1>
+          <p>写下庄园的往事，让每位玩家带着各自的秘密入席。狼人杀身份仍由游戏随机分配。</p>
+        </div>
+        <span class="seal">叙事工坊</span>
+      </div>
+      <div id="notice" class="notice" role="status" aria-live="polite">正在读取本地剧本…</div>
+      <div id="restorePanel" class="notice hidden">
+        <span id="restoreMessage"></span>
+        <div class="row wrap">
+          <button id="retryRestore" class="hidden">重试恢复</button
+          ><button id="restoreCopy" class="hidden">恢复为独立草稿</button
+          ><button id="useLatest" class="hidden">继续使用最新版本</button>
+        </div>
+      </div>
+      <p id="draftStatus" class="hint" role="status"></p>
+      <section id="automaticWorkshop" class="auto-workshop">
+        <h2>自动制作剧情视频</h2>
+        <div id="autoSelectors" class="auto-selectors"></div>
+        <ol id="autoStages" class="auto-stages" aria-label="自动制作进度"></ol>
+        <div class="auto-actions">
+          <button id="autoStart" type="button" class="primary">开始制作</button
+          ><button id="autoPause" type="button" hidden>暂停制作</button
+          ><button id="autoContinue" type="button" hidden>继续制作／查询</button
+          ><button id="autoCancel" type="button" hidden>取消后续制作</button
+          ><button id="autoRefresh" type="button">刷新进度</button>
+        </div>
+        <p id="autoError" role="alert"></p>
+        <p id="autoMessage" role="status" aria-live="polite"></p>
+        <details id="keyAssetsSection" hidden>
+          <summary>关键物品与场景定妆</summary>
+          <p class="hint">
+            为当前剧本中的关键场景与道具保存可复用的参考图。系统也会在自动制作时识别并整理跨镜头需要保持一致的视觉素材。确认后可用于关联镜头，旧图和历史任务保留。
+          </p>
+          <div id="keyAssetsControls"></div>
+          <div id="keyAssetsList" class="auto-gallery"></div>
+          <button id="applyKeyAssets" type="button">将已确认物品加入所选镜头并保存为新版本</button>
+        </details>
+        <div id="autoResults" class="auto-results" hidden>
+          <p id="autoScope"></p>
+          <div id="autoVisualAssetBackfill" class="auto-backfill" hidden></div>
+          <p id="autoCapabilities" class="hint"></p>
+          <details open>
+            <summary>AI 检查结果</summary>
+            <div id="autoReports" class="auto-report-list"></div>
+          </details>
+          <details id="autoCharactersSection" open hidden>
+            <summary>人物定妆与关键视觉素材核对</summary>
+            <div class="auto-character-groups">
+              <section>
+                <h3>人物定妆</h3>
+                <div id="autoCharacters" class="auto-gallery"></div>
+              </section>
+              <section>
+                <h3>关键场景与道具定妆</h3>
+                <div id="autoVisualAssets" class="auto-gallery"></div>
+              </section>
+            </div>
+          </details>
+          <details id="autoFramesSection" open hidden>
+            <summary>分镜与级联关系</summary>
+            <div id="autoFrames"></div>
+          </details>
+          <details id="autoShotsSection" hidden>
+            <summary>实际视频镜头</summary>
+            <div id="autoShots"></div>
+          </details>
+          <section id="autoFinal" hidden>
+            <h3>完整成片</h3>
+            <video id="autoFinalVideo" controls playsinline preload="metadata"></video
+            ><a id="autoDownload" download="血月停战宴-双语成片.mp4">下载 MP4</a
+            ><a id="autoSrt" download="血月停战宴-双语字幕.srt">下载双语字幕</a>
+          </section>
+          <label id="autoAuthorization" class="auto-auth" hidden
+            ><input id="autoAuthorize" type="checkbox" /><span id="autoChargeScope"></span
+          ></label>
+          <div class="auto-actions">
+            <button id="autoConfirm" type="button" class="primary" hidden>确认并继续</button
+            ><button id="autoSkipChecks" type="button" hidden>手动跳过 AI 检查失败</button
+            ><button id="autoAcceptShot" type="button" hidden>已核对，接受此镜头继续</button>
+          </div>
+        </div>
+      </section>
+      <details id="workshopAdvanced" class="workshop-advanced">
+        <summary>高级编辑 · 剧本、参考素材、字幕与单镜重做</summary>
+        <ol id="workshopSteps" class="workshop-steps" aria-label="制作进度"></ol>
+        <div class="layout">
+          <section class="panel editor">
+            <div class="section-title">
+              <h2>01 / 编写剧本</h2>
+              <div class="row wrap">
+                <button id="sample">载入 6 人示例</button
+                ><button id="bloodMoonSample">载入《血月停战宴》</button>
+              </div>
+            </div>
+            <label
+              >房间人数<select id="roomSize">
+                <option value="6">6 人间</option>
+                <option value="12">12 人间</option>
+              </select></label
+            >
+            <div class="row">
+              <label class="grow"
+                >本机剧本库<select id="library">
+                  <option value="">新建剧本</option>
+                </select></label
+              ><button id="newStory">新建</button>
+            </div>
+            <label
+              >原始剧本<textarea
+                id="source"
+                rows="7"
+                maxlength="16000"
+                placeholder="粘贴你的故事：时代、庄园、各位人物及彼此的关系。也可以导入 UTF-8 TXT 文件。"
+              ></textarea>
+            </label>
+            <div class="row wrap">
+              <label class="file-button"
+                >导入 TXT<input id="import" type="file" accept=".txt,text/plain" /></label
+              ><label class="grow">用于整理剧本的 Agent<select id="organizer"></select></label
+              ><button id="organizerRefresh" type="button">刷新 Agent 配置</button
+              ><label id="organizerTemporaryKeyLabel" class="grow" hidden
+                >本次临时 API 密钥<input
+                  id="organizerTemporaryKey"
+                  type="password"
+                  autocomplete="off"
+                  spellcheck="false"
+                  placeholder="仅在当前页面使用，不保存到浏览器" /></label
+              ><button id="prepare" class="primary">整理为六人剧本</button>
+            </div>
+            <p id="organizerStatus" class="hint" role="status"></p>
+            <a id="organizerConfigLink" class="button-link" href="/#agents">返回游戏 Agent 配置</a>
+            <p class="hint">
+              只使用你明确选择的 Agent
+              整理；不自动调用其他席位。也可直接编辑下方内容，无需聊天接口。
+            </p>
+            <div id="warnings" class="hint"></div>
+            <hr />
+            <label>剧本名称<input id="title" maxlength="60" /></label
+            ><label>公开背景<textarea id="background" rows="4" maxlength="1800"></textarea></label>
+            <h3 id="characterTitle">6 位人物</h3>
+            <p class="hint">
+              姓名只在本次剧情对局中替换。公开关系所有人可见；个人秘密用于故事动机与可选核对，不代表本局阵营。
+            </p>
+            <div id="characters" class="characters"></div>
+            <div class="section-title">
+              <h3 id="sceneTitle">开场分镜 / 电影镜头</h3>
+              <button id="expand60">按剧情扩展镜头草稿</button>
+            </div>
+            <label
+              >统一视觉设定<textarea
+                id="visualGuide"
+                rows="3"
+                maxlength="1600"
+                placeholder="同一建筑的空间关系、人物外观服饰、光线、道具和行进方向。"
+              ></textarea>
+            </label>
+            <p class="hint">
+              画面与解说只写公开信息。视频不揭露个人秘密，也不固定狼人杀身份。电影剧本每镜 1—15
+              秒，可编辑旁白、出场人物、人物对白与镜头衔接；制作前检查总时长、角色覆盖和说话人数。
+            </p>
+            <section id="referenceLibrary" class="reference-library">
+              <h3>参考素材库</h3>
+              <p class="hint">
+                导入人物、场景、服装或道具图片，再在每镜选择。仅保存至本机，提交视频时使用所选图片。每张不超过
+                8MB。
+              </p>
+              <div class="row wrap">
+                <label
+                  >素材名称<input
+                    id="referenceLabel"
+                    maxlength="80"
+                    placeholder="例如：暮鸦宴厅东窗" /></label
+                ><label
+                  >素材用途<select id="referenceKind">
+                    <option value="scene">场景</option>
+                    <option value="character">人物</option>
+                    <option value="costume">服装</option>
+                    <option value="prop">道具</option>
+                  </select></label
+                ><label
+                  >图片文件<input
+                    id="referenceFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp" /></label
+                ><button id="referenceUpload" type="button">导入参考图</button>
+              </div>
+              <p id="referenceStatus" role="status" class="hint"></p>
+              <div id="referenceLibraryPreview" class="reference-previews"></div>
+            </section>
+            <div id="scenes"></div>
+            <section id="preflightPanel" class="preflight-panel" hidden>
+              <h3>制作前检查</h3>
+              <p class="hint">
+                修正下方规则问题后可继续制作。AI
+                核对可按需使用；生成后的画面、声音及镜头衔接需逐镜预览。
+              </p>
+              <div id="preflight" role="status"></div>
+              <button id="revisionDraft" type="button">复制为独立修订草稿</button>
+            </section>
+            <label class="check"
+              ><input
+                id="confirmed"
+                type="checkbox"
+              />我已检查人物、公开分镜及秘密，没有固定本局阵营或修改胜利规则。</label
+            >
+            <div class="row wrap">
+              <button id="save" class="primary">保存剧本版本</button
+              ><span id="version" class="hint">未保存</span>
+            </div>
+          </section>
+          <aside>
+            <section
+              id="rehearsalPanel"
+              class="panel rehearsal-panel"
+              hidden
+              aria-hidden="true"
+              data-legacy-only="true"
+            >
+              <h2>历史本地预演（兼容查看）</h2>
+              <p class="hint">
+                先听故事，再决定正式补做哪些镜头。只使用本地已有画面、免费临时配音、字幕和配乐，不调用付费图片或视频模型。
+              </p>
+              <div id="previewTimeline" class="preview-timeline"></div>
+              <div class="row wrap">
+                <button id="refreshAssets">重新读取旧素材</button
+                ><button id="makeRehearsal" class="primary">制作本地预演</button
+                ><button id="resumeRehearsal" hidden>继续历史预演处理</button>
+              </div>
+              <p id="rehearsalRequirement" class="hint"></p>
+              <p id="rehearsalMessage" class="hint" role="status" aria-live="polite">
+                尚未制作预演。
+              </p>
+              <ol id="rehearsalProgress" class="rehearsal-progress"></ol>
+              <video id="rehearsalVideo" hidden controls playsinline preload="metadata"></video
+              ><a id="downloadRehearsal" hidden download="血月停战宴-叙事预演.mp4">下载当前预演</a>
+              <div id="rehearsalConfirmation" class="rehearsal-confirmation">
+                <p id="rehearsalWatchStatus" class="hint" role="status" aria-live="polite"></p>
+                <ul id="rehearsalBlockers" class="hint"></ul>
+                <details id="rehearsalReviewPanel">
+                  <summary>逐镜衔接检查 <span id="rehearsalReviewCount"></span></summary>
+                  <p class="hint">
+                    观看后，请核对空间、站位、视线与动作是否承接，再逐项勾选。这里只记录你的检查，不会自动保证画面连续。
+                  </p>
+                  <div id="rehearsalReviewList"></div>
+                </details>
+              </div>
+              <button id="confirmRehearsal" class="primary wide" disabled>
+                完整观看历史预演后确认
+              </button>
+              <details>
+                <summary>从旧任务复制图片（待重新确认）</summary>
+                <p class="hint">
+                  外观相同的人物图可复用。各镜选择的旧分镜图片也会复制；旧视频不算作新版正式对白。来源保留，原任务不会改变。
+                </p>
+                <div id="reuseCharacters" class="reuse-characters"></div>
+                <button id="importOldArt" disabled>复制选中图片为待确认素材</button>
+              </details>
+            </section>
+            <section class="panel art-panel">
+              <h2>02 / 人物与分镜</h2>
+              <p class="hint">
+                先按房间人数制作人物定妆照，检查后整组确认；再依剧本镜头数制作并确认分镜起始图。仅使用公开设定，参考图可以改善人物一致性，动态变形仍需逐镜检查。
+              </p>
+              <p id="imageConfigStatus" class="hint">正在读取图片配置…</p>
+              <a href="/image-settings.html" target="_blank" rel="noopener">管理独立图片密钥 ↗</a>
+              <div class="row wrap art-actions">
+                <button id="createArt" class="primary">制作人物定妆照</button
+                ><button id="resumeArt" class="hidden">继续未完成图片</button>
+              </div>
+              <p id="artRequirement" class="hint"></p>
+              <div id="artActivity" class="art-activity hidden" role="status" aria-live="polite">
+                <strong id="artActivityTitle"></strong>
+                <p id="artActivityDetail"></p>
+                <progress id="artOverall" max="6" value="0"></progress>
+              </div>
+              <button id="retryJobs" class="hidden">重新查询制作进度（不重新生成）</button>
+              <p id="artMessage" class="hint" role="status">保存并确认电影剧本后，才可制作图片。</p>
+              <h3>人物定妆 <span id="characterCount"></span></h3>
+              <div id="characterArt" class="art-grid"></div>
+              <button id="confirmCharacters" class="wide" disabled>确认人物</button>
+              <hr />
+              <div class="section-title">
+                <h3>分镜起始图 <span id="frameCount"></span></h3>
+                <button id="generateFrames" disabled>制作分镜图片</button>
+              </div>
+              <div id="frameArt" class="art-grid frames"></div>
+              <button id="confirmFrames" class="wide" disabled>确认全部分镜</button>
+              <details id="artHistory">
+                <summary>历史图片与制作提示词</summary>
+                <div id="artHistoryItems" class="hint">暂无历史图片</div>
+              </details>
+            </section>
+            <section class="panel intro-panel">
+              <h2>电影人物登场介绍</h2>
+              <p class="hint">
+                仅显示姓名与公开剧情身份；不显示狼人杀身份或私人秘密。建议来自出场名单，需要逐镜对照画面人工确认，并避开面部和底部对白字幕。
+              </p>
+              <label class="intro-confirm"
+                ><input id="introEnabled" type="checkbox" />启用电影姓名条</label
+              ><label
+                >预览与制作范围<select id="introSource">
+                  <option value="">当前剧本镜头（用于视频成片）</option>
+                </select></label
+              >
+              <div class="intro-controls">
+                <button id="suggestIntros" type="button">建议首次登场标记</button
+                ><button id="addIntro" type="button">添加介绍</button>
+              </div>
+              <div id="introMarkers"></div>
+              <p id="introIssues" class="hint intro-errors"></p>
+              <div class="intro-screen">
+                <video id="introMovie" controls playsinline preload="metadata"></video>
+                <div id="introNameplate" class="intro-nameplate" hidden>
+                  <strong id="introName"></strong><span id="introIdentity"></span>
+                </div>
+              </div>
+              <label
+                >姓名条效果预览 <span id="introClock">0.0 秒</span
+                ><input
+                  id="introScrub"
+                  class="intro-time"
+                  type="range"
+                  min="0"
+                  max="90"
+                  step="0.1"
+                  value="0" /></label
+              ><label class="intro-confirm"
+                ><input
+                  id="introConfirm"
+                  type="checkbox"
+                />已对照画面，核对全部人物的首次登场、姓名、公开剧情身份和字幕避让</label
+              >
+              <p class="hint">
+                姓名条设置随剧本保存。已有成片可在本地合成为独立副本，完成预览后选择采用。
+              </p>
+              <button id="createIntroCopy" type="button" class="primary wide" disabled>
+                复用已有成片，制作人物介绍副本
+              </button>
+              <p id="introCopyMessage" role="status" class="hint"></p>
+              <button id="resumeIntroCopy" hidden type="button">继续本地合成／查询</button
+              ><video id="introCopyVideo" hidden controls playsinline preload="metadata"></video>
+              <div class="intro-delivery">
+                <a id="downloadIntroCopy" hidden download="血月停战宴-人物介绍预览.mp4"
+                  >下载介绍副本</a
+                ><button id="acceptIntroCopy" disabled type="button">完整观看后采用此副本</button>
+              </div>
+            </section>
+            <section class="panel">
+              <h2>视频接口设置</h2>
+              <p class="hint">
+                独立的视频专用密钥，使用 Windows 当前用户加密保存在本机，不读取玩家或图片密钥。
+              </p>
+              <label
+                >接口地址<input
+                  id="provider"
+                  type="url"
+                  value="https://api-fast.hualong-ai.com"
+                  autocomplete="off" /></label
+              ><label>模型<input id="model" value="grok-imagine-video-1.5" readonly /></label
+              ><label
+                >视频专用密钥<input
+                  id="videoKey"
+                  type="password"
+                  autocomplete="new-password"
+                  placeholder="已保存时留空即可保留"
+              /></label>
+              <div class="row wrap">
+                <button id="saveConfig">加密保存</button><button id="checkConfig">检查鉴权</button>
+              </div>
+              <p id="configStatus" class="hint"></p>
+            </section>
+            <section class="panel">
+              <h2>独立剧情视频</h2>
+              <p class="hint">
+                <span id="productionHint"
+                  >独立生成剧情视频，完成后即可预览和下载；采用为游戏开场是可选操作。总时长由镜头时长自动计算，单镜
+                  1—15 秒。费用以华龙账户为准。</span
+                >
+              </p>
+              <label
+                >本机视频任务<select id="videoHistory">
+                  <option value="">暂无任务</option>
+                </select></label
+              ><button id="generate" class="primary wide">生成独立剧情视频</button>
+              <p id="jobMessage" class="hint">保存并确认剧本后开始制作。</p>
+              <div id="jobs"></div>
+              <button id="resume" class="hidden">继续查询原任务</button>
+              <video id="preview" class="hidden" controls playsinline preload="metadata"></video
+              ><label id="acceptLabel" class="check hidden"
+                ><input
+                  id="acceptCheck"
+                  type="checkbox"
+                  disabled
+                />已完整预览，确认画面、声音及公开信息无误。</label
+              ><button id="accept" class="primary wide hidden" disabled>
+                采用这版作为游戏开场（可选）</button
+              ><a id="downloadVideo" class="button-link" hidden download="剧情视频.mp4">下载 MP4</a>
+              <p class="hint">
+                视频可独立预览和下载。采用操作仅用于把选定版本绑定为游戏开场，开始游戏不依赖视频是否生成。修改剧本后需要为新版本重新制作。
+              </p>
+            </section>
+            <section class="panel" id="subtitlePanel" hidden>
+              <h2>双语字幕与主题片尾</h2>
+              <p class="hint">
+                先完整观看原片，再逐句核对声音和字幕时间。合成使用已完成的视频，不提交生成请求。片尾追加约
+                4 秒。
+              </p>
+              <div id="subtitleRows"></div>
+              <label>中文主题<input id="subtitleTitleZh" maxlength="100" /></label
+              ><label>English title<input id="subtitleTitleEn" maxlength="100" /></label
+              ><label>中文悬念<input id="subtitleHookZh" maxlength="100" /></label
+              ><label>English hook<input id="subtitleHookEn" maxlength="100" /></label
+              ><button id="subtitleCreate" type="button">本地合成双语副本</button>
+              <p id="subtitleMessage" role="status" class="hint"></p>
+              <div id="subtitleCopies"></div>
+            </section>
+          </aside>
+        </div>
+      </details>
+    </main>
+    <dialog id="artZoom">
+      <button id="closeArtZoom" aria-label="关闭大图">关闭 ×</button
+      ><img id="artZoomImage" alt="制作图片放大预览" />
+      <p id="artZoomCaption"></p>
+    </dialog>
+    <script src="manor.js"></script>
+    <script src="story-art-ui.js"></script>
+    <script src="character-intros.js"></script>
+    <script src="scenario.js"></script>
+    <script src="workshop-preview.js"></script>
+    <script src="workshop-state.js"></script>
+    <script src="workshop-flow.js"></script>
+    <script src="workshop-preview-ui.js"></script>
+    <script src="scenario-review-ui.js"></script>
+    <script src="character-intro-ui.js"></script>
+    <script src="story-subtitle-ui.js"></script>
+    <script src="workshop-auto-ui.js"></script>
+    <script src="scenario-settings.js"></script>
+  </body>
+</html>

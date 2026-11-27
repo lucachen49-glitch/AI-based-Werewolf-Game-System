@@ -1,109 +1,648 @@
 /* Shared manor materials. Each room has independent seat geometry. */
-.manor-room-art,.manor-table-art{display:none}
-.manor-mode #tableView{--panel:#211914;--panel2:#2d2119;--line:rgba(207,165,104,.2);--text:#f5e8d3;--muted:#b6a28b;--soft:#d5c3a9;--teal:#dfbd79;--teal2:#c99550;--gold:#edc580}
-.manor-mode .app-shell{max-width:1920px}
-.manor-mode #tableView .table-panel,.manor-mode #tableView .spectator-rail{background:#211914;border-color:#59412b}
-.manor-mode #tableView .commentary-caption{background:#2b2019;border-color:#6c5030}
-.manor-mode #tableView .spectator-toolbar select,.manor-mode #tableView .speech-filters select{background:#30231b}
-.manor-mode #tableView .record-tabs button[aria-selected=true]{background:#4c3421;color:#f1cf95}
-.manor-mode #tableView .table-legend{border-color:#59412b}
-.manor-mode #tableView .voice-status{color:#baa78c}
-.manor-mode .table-viewport{background:#1b120e;scrollbar-color:#98713c #241910}
-.table-panel .table-scene:is(.manor-six,.manor-twelve),.watch-mode .table-panel .table-scene:is(.manor-six,.manor-twelve){aspect-ratio:8 / 5;min-width:800px;width:100%;border-radius:12px;background:radial-gradient(ellipse at 50% 35%,#785335,#261910 75%);isolation:isolate}
-:is(.manor-six,.manor-twelve) .manor-room-art{display:block;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:0}
-:is(.manor-six,.manor-twelve) .manor-table-art{display:block;position:absolute;left:10%;top:31%;width:80%;height:59%;object-fit:fill;pointer-events:none;z-index:2;filter:brightness(.72) saturate(.68) drop-shadow(0 15px 12px #10090699)}
-:is(.manor-six,.manor-twelve) .asset-failed{display:none}
-:is(.manor-six,.manor-twelve) .table-ring{left:50%;top:56%;width:77%;height:47%;border:5px double #a37b45;background:radial-gradient(ellipse,#644025,#302014);box-shadow:inset 0 0 35px #1d110a;z-index:0}
-:is(.manor-six,.manor-twelve):has(.manor-table-art:not(.asset-failed)) .table-ring{visibility:hidden}
-.table-scene:is(.manor-six,.manor-twelve) .players-grid,.watch-mode .table-scene:is(.manor-six,.manor-twelve) .players-grid{z-index:auto}
-.table-scene:is(.manor-six,.manor-twelve) .player,.watch-mode .table-scene:is(.manor-six,.manor-twelve) .player{position:absolute;left:calc(var(--seat-x) - 12%);top:var(--seat-y);width:24%;height:48%;padding:0;transform:none;border:0;border-radius:0;box-shadow:none;background:none;opacity:1;filter:none;pointer-events:none;transition:none;z-index:auto}
-.table-scene:is(.manor-six,.manor-twelve) .player:hover{transform:none}
-.manor-art-button{position:absolute;left:0;top:0;width:100%;height:100%;padding:0;border:0;background:none;cursor:pointer;pointer-events:auto;z-index:1}
-.front-seat .manor-art-button{z-index:3}
-.manor-art-button:focus-visible{outline:2px solid #f1ce8e;outline-offset:2px;border-radius:18px}
-.manor-portrait{width:100%;height:100%;object-fit:contain;object-position:center bottom;filter:drop-shadow(0 5px 6px #0a0508aa);transition:filter .25s}
-.table-scene:is(.manor-six,.manor-twelve) .player .player-avatar.face-anchor{position:absolute;top:5%;left:37%;width:26%;height:19%;margin:0;background:transparent;border:0;box-shadow:none;opacity:0;pointer-events:none;animation:none}
-.table-scene:is(.manor-six,.manor-twelve) .player .manor-avatar-fallback{position:absolute;top:12%;left:50%;transform:translateX(-50%);width:92px;height:112px;font-size:54px;display:grid;place-items:center;background:#35231b;border:2px solid #c09860;border-radius:48% 48% 16px 16px;box-shadow:0 0 0 9px #422c20,0 0 0 11px #90623d}
-.manor-avatar-fallback img{width:100%;height:100%;border-radius:inherit;object-fit:cover}
-.manor-nameplate{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:clamp(138px,86%,210px);min-height:79px;padding:8px 9px 5px;border:1px solid #d7b477;outline:3px solid #5f3e23;outline-offset:-5px;border-radius:3px 3px 7px 7px;background:linear-gradient(110deg,#d1ae72,#f0d8a9 45%,#dbb87c);color:#352316;box-shadow:0 5px 10px #0d0708aa;pointer-events:auto;z-index:5;user-select:text}
-.rear-seat .manor-nameplate{bottom:16%}
-.table-scene:is(.manor-six,.manor-twelve) .seat-profile,.watch-mode .table-scene:is(.manor-six,.manor-twelve) .seat-profile{display:block;width:100%;padding:0;border:0;background:none;text-align:left;color:#352316;font:inherit;user-select:text}
-.plate-heading{display:flex;align-items:center;gap:6px;line-height:21px}
-.table-scene:is(.manor-six,.manor-twelve) .seat-number{position:static;display:inline-grid;place-items:center;flex:0 0 22px;width:22px;height:22px;border:1px solid #d7b477;border-radius:3px;background:#5b3723;color:#f4d59e;font:700 12px Georgia,serif;box-shadow:none}
-.table-scene:is(.manor-six,.manor-twelve) .player .player-name{font-size:clamp(12px,1vw,16px);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#352316;line-height:23px;max-width:100%}
-.life-mark{margin-left:auto;flex-shrink:0;font-size:9px;color:#4d5031}
-.plate-details{display:flex;align-items:center;justify-content:space-between;gap:5px;margin-top:4px}
-.table-scene:is(.manor-six,.manor-twelve) .player .player-role{display:block;max-width:76px;padding:1px 5px;background:#67452b15;border:1px solid #6d4b2d40;border-radius:3px;color:#624027;font-size:10px;line-height:14px}
-.table-scene:is(.manor-six,.manor-twelve) .player .player-state{margin:0;color:#624027;font-size:10px;min-height:14px;line-height:14px;white-space:nowrap}
-.table-scene:is(.manor-six,.manor-twelve) .player .seat-connection{display:flex;align-items:center;gap:4px;justify-content:center;margin:4px 0 0;padding:1px 0;border:0;background:none;color:#5c472f;font-size:9px;line-height:13px;text-align:center;max-width:100%}
-.table-scene:is(.manor-six,.manor-twelve) .player .seat-connection.online{color:#365b3a}.table-scene:is(.manor-six,.manor-twelve) .player .seat-connection.offline{color:#8e3024}
-:is(.manor-six,.manor-twelve) .dead .manor-portrait{filter:grayscale(.85) brightness(.65)}
-:is(.manor-six,.manor-twelve) .dead .life-mark{color:#8b3026;font-weight:800}:is(.manor-six,.manor-twelve) .dead .manor-nameplate{background:linear-gradient(110deg,#b49c79,#d9c5a6,#baa17d)}
-:is(.manor-six,.manor-twelve) .acting .manor-nameplate,:is(.manor-six,.manor-twelve) .speaking .manor-nameplate{outline-color:#e5b955;box-shadow:0 0 0 2px #ebc16e,0 5px 20px #120b09}
-:is(.manor-six,.manor-twelve) .speaking .manor-portrait{filter:drop-shadow(0 0 4px #ffe2a1) drop-shadow(0 0 11px #daa34dcc)}
-:is(.manor-six,.manor-twelve) .pulsing .manor-portrait{animation:manor-speaking 1.6s ease-in-out infinite}
-@keyframes manor-speaking{0%,100%{filter:drop-shadow(0 0 3px #ffe2a1) drop-shadow(0 0 6px #daa34d88)}50%{filter:drop-shadow(0 0 5px #ffe2a1) drop-shadow(0 0 16px #daa34dee)}}
-.table-scene:is(.manor-six,.manor-twelve) .table-center,.watch-mode :is(.manor-six,.manor-twelve) .table-center{display:none}
-:is(.manor-six,.manor-twelve) .table-center .moon,.watch-mode :is(.manor-six,.manor-twelve) .table-center .moon,:is(.manor-six,.manor-twelve) .center-seal{display:none}
-:is(.manor-six,.manor-twelve) .table-center strong,.watch-mode :is(.manor-six,.manor-twelve) .table-center strong{font:500 17px Georgia,"Noto Serif SC",serif;letter-spacing:.2em;color:#f3d49d;opacity:.65}
-:is(.manor-six,.manor-twelve) .table-center>span{padding:3px 7px;border-radius:5px;background:#21130988;font-size:10px!important;color:#edcf9e}
-.manor-mode .speech-bubble{background:rgba(40,26,17,.98);border-color:#c99c53;color:#f6e8ce;box-shadow:0 10px 40px #0d0709aa}
-.manor-mode .speech-bubble .bubble-heading span{color:#c9b28f}
-.manor-mode .speech-bubble{padding:10px 12px}
-.manor-mode .speech-bubble .bubble-heading{gap:4px}.manor-mode .speech-bubble .bubble-heading b{font-size:11px}.manor-mode .speech-bubble .bubble-heading span{font-size:8px}
-.manor-mode .speech-bubble p{font-size:12px;line-height:1.8}
-.manor-settings{margin:18px 0;padding:14px;border:1px solid #6a4b30;border-radius:12px;background:#2c211b}
-.manor-settings .full-label{margin:0}.manor-settings select{display:block;width:100%;margin-top:7px}
-.manor-settings>p{font-size:11px;line-height:1.7;color:#bea88b;margin:9px 0 0}
-.manor-portrait-preview{display:flex;align-items:center;gap:14px;margin-top:12px;color:#e1c99f;font-size:12px}.manor-portrait-preview img{height:80px;width:65px;object-fit:cover;object-position:top;border-radius:8px;background:#513b29}.manor-portrait-preview small{display:block;margin-top:6px;font-size:10px;color:#b9a48c}
-.record-avatar img[data-portrait]{object-position:50% 15%}
-@media(min-width:1000px){
-  .watch-mode.manor-mode #tableView{max-width:1920px;height:100dvh;display:flex;flex-direction:column;padding-bottom:12px;box-sizing:border-box}
-  .watch-mode.manor-mode #tableView>.page-heading,.watch-mode.manor-mode .status-strip,.watch-mode.manor-mode .spectator-toolbar{flex-shrink:0}
-  .watch-mode.manor-mode .game-layout{flex:1;min-height:0}
-  .watch-mode.manor-mode .table-panel{height:100%;min-height:0;display:flex;flex-direction:column}
-  .watch-mode.manor-mode .table-panel>.panel-head{padding:7px 15px;flex-shrink:0}
-  .watch-mode.manor-mode .table-panel>.panel-head .panel-kicker{display:none}
-  .watch-mode.manor-mode .table-panel>.panel-head h2{margin:0;font-size:13px}
-  .watch-mode.manor-mode .voice-status{display:none}
-  .watch-mode.manor-mode .commentary-caption{flex-shrink:0;max-height:72px;overflow:auto}
-  .watch-mode.manor-mode .table-stage{flex:1;min-height:0;max-width:none;min-width:0;display:flex;align-items:center;justify-content:center}
-  .watch-mode.manor-mode .table-viewport{width:min(calc(100% - 16px),calc((100dvh - 340px)*1.6));margin:0 8px;flex-shrink:0}
-  .watch-mode.manor-mode .table-panel .table-scene:is(.manor-six,.manor-twelve){min-width:640px}
-  .watch-mode.manor-mode .table-scroll-hint{margin:5px 0;padding:0;line-height:15px}
-  .watch-mode.manor-mode .table-legend{padding:8px 18px;flex-shrink:0}
-  .watch-mode.manor-mode .spectator-rail{position:relative;top:0;height:100%;min-height:0;display:flex;flex-direction:column}
-  .watch-mode.manor-mode .spectator-rail.collapsed{display:none}
-  .watch-mode.manor-mode .spectator-rail>.panel-head{padding:17px 16px 12px;flex-shrink:0}
-  .watch-mode.manor-mode .record-tabs,.watch-mode.manor-mode .speech-filters,.watch-mode.manor-mode .new-records{flex-shrink:0}
-  .watch-mode.manor-mode .records-viewport{height:auto;min-height:70px;flex:1}
+.manor-room-art,
+.manor-table-art {
+  display: none;
 }
-@media(min-width:1000px) and (max-width:1100px){
-  .watch-mode.manor-mode .game-layout{grid-template-columns:minmax(0,1fr) 260px;gap:12px}
-  .watch-mode.manor-mode .status-strip{margin-bottom:8px}
-  .watch-mode.manor-mode .phase-card,.watch-mode.manor-mode .status-metric,.watch-mode.manor-mode .stage-progress{padding:7px 14px}
-  .watch-mode.manor-mode .spectator-toolbar{margin-bottom:8px}
-  .watch-mode.manor-mode .commentary-caption{min-height:45px;padding:8px 12px;margin-bottom:6px}
-  .watch-mode.manor-mode .commentary-caption p{font-size:11px}
+.manor-mode #tableView {
+  --panel: #211914;
+  --panel2: #2d2119;
+  --line: rgba(207, 165, 104, 0.2);
+  --text: #f5e8d3;
+  --muted: #b6a28b;
+  --soft: #d5c3a9;
+  --teal: #dfbd79;
+  --teal2: #c99550;
+  --gold: #edc580;
 }
-@media(max-width:1100px) and (min-width:701px){.manor-mode .table-panel .table-scene:is(.manor-six,.manor-twelve){min-width:800px}}
-@media(max-width:700px){.manor-mode #tableView{padding-left:10px;padding-right:10px}.manor-mode .table-panel .table-scene:is(.manor-six,.manor-twelve){min-width:800px}.manor-mode .spectator-rail{background:#211914;border-color:#987142}.manor-mode .mobile-record-toggle{background:#4c3421;border-color:#b0854e;color:#f1d59f}}
-@media(max-width:700px){
-  .manor-mode .spectator-rail{height:62dvh;max-height:calc(100dvh - 120px);display:flex;flex-direction:column;overflow:hidden}
-  .manor-mode .spectator-rail.collapsed{display:none}
-  .manor-mode .spectator-rail>.panel-head,.manor-mode .spectator-rail .record-tabs,.manor-mode .spectator-rail .speech-filters,.manor-mode .spectator-rail .new-records{flex-shrink:0}
-  .manor-mode .spectator-rail .records-viewport,.watch-mode.manor-mode .spectator-rail .records-viewport{height:auto;min-height:60px;flex:1}
-  .watch-mode.manor-mode #tableView>.page-heading>div:first-child{display:none}
-  .watch-mode.manor-mode .page-heading{margin-bottom:6px}
-  .watch-mode.manor-mode .status-strip{margin-bottom:8px}
-  .watch-mode.manor-mode .spectator-toolbar{margin-bottom:8px}
-  .watch-mode.manor-mode .voice-status{display:none}
-  .watch-mode.manor-mode .table-panel>.panel-head .panel-kicker{display:none}
-  .watch-mode.manor-mode .table-panel>.panel-head{padding:10px 12px}
-  .watch-mode.manor-mode .table-panel>.panel-head h2{font-size:12px;margin:4px 0}
-  .watch-mode.manor-mode .commentary-caption{min-height:45px;padding:8px}
-  .watch-mode.manor-mode .table-tools{max-width:76%;gap:4px}
-  .watch-mode.manor-mode .seat-count{display:none}
-  .watch-mode.manor-mode .table-viewport{scroll-margin-top:70px}
+.manor-mode .app-shell {
+  max-width: 1920px;
 }
-@media(prefers-reduced-motion:reduce){:is(.manor-six,.manor-twelve) .pulsing .manor-portrait{animation:none;filter:drop-shadow(0 0 5px #ffe2a1) drop-shadow(0 0 11px #daa34dcc)}:is(.manor-six,.manor-twelve) .manor-portrait{transition:none}}
+.manor-mode #tableView .table-panel,
+.manor-mode #tableView .spectator-rail {
+  background: #211914;
+  border-color: #59412b;
+}
+.manor-mode #tableView .commentary-caption {
+  background: #2b2019;
+  border-color: #6c5030;
+}
+.manor-mode #tableView .spectator-toolbar select,
+.manor-mode #tableView .speech-filters select {
+  background: #30231b;
+}
+.manor-mode #tableView .record-tabs button[aria-selected='true'] {
+  background: #4c3421;
+  color: #f1cf95;
+}
+.manor-mode #tableView .table-legend {
+  border-color: #59412b;
+}
+.manor-mode #tableView .voice-status {
+  color: #baa78c;
+}
+.manor-mode .table-viewport {
+  background: #1b120e;
+  scrollbar-color: #98713c #241910;
+}
+.table-panel .table-scene:is(.manor-six, .manor-twelve),
+.watch-mode .table-panel .table-scene:is(.manor-six, .manor-twelve) {
+  aspect-ratio: 8 / 5;
+  min-width: 800px;
+  width: 100%;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at 50% 35%, #785335, #261910 75%);
+  isolation: isolate;
+}
+:is(.manor-six, .manor-twelve) .manor-room-art {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+  z-index: 0;
+}
+:is(.manor-six, .manor-twelve) .manor-table-art {
+  display: block;
+  position: absolute;
+  left: 10%;
+  top: 31%;
+  width: 80%;
+  height: 59%;
+  object-fit: fill;
+  pointer-events: none;
+  z-index: 2;
+  filter: brightness(0.72) saturate(0.68) drop-shadow(0 15px 12px #10090699);
+}
+:is(.manor-six, .manor-twelve) .asset-failed {
+  display: none;
+}
+:is(.manor-six, .manor-twelve) .table-ring {
+  left: 50%;
+  top: 56%;
+  width: 77%;
+  height: 47%;
+  border: 5px double #a37b45;
+  background: radial-gradient(ellipse, #644025, #302014);
+  box-shadow: inset 0 0 35px #1d110a;
+  z-index: 0;
+}
+:is(.manor-six, .manor-twelve):has(.manor-table-art:not(.asset-failed)) .table-ring {
+  visibility: hidden;
+}
+.table-scene:is(.manor-six, .manor-twelve) .players-grid,
+.watch-mode .table-scene:is(.manor-six, .manor-twelve) .players-grid {
+  z-index: auto;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player,
+.watch-mode .table-scene:is(.manor-six, .manor-twelve) .player {
+  position: absolute;
+  left: calc(var(--seat-x) - 12%);
+  top: var(--seat-y);
+  width: 24%;
+  height: 48%;
+  padding: 0;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  opacity: 1;
+  filter: none;
+  pointer-events: none;
+  transition: none;
+  z-index: auto;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player:hover {
+  transform: none;
+}
+.manor-art-button {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 1;
+}
+.front-seat .manor-art-button {
+  z-index: 3;
+}
+.manor-art-button:focus-visible {
+  outline: 2px solid #f1ce8e;
+  outline-offset: 2px;
+  border-radius: 18px;
+}
+.manor-portrait {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 5px 6px #0a0508aa);
+  transition: filter 0.25s;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .player-avatar.face-anchor {
+  position: absolute;
+  top: 5%;
+  left: 37%;
+  width: 26%;
+  height: 19%;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  animation: none;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .manor-avatar-fallback {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92px;
+  height: 112px;
+  font-size: 54px;
+  display: grid;
+  place-items: center;
+  background: #35231b;
+  border: 2px solid #c09860;
+  border-radius: 48% 48% 16px 16px;
+  box-shadow:
+    0 0 0 9px #422c20,
+    0 0 0 11px #90623d;
+}
+.manor-avatar-fallback img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+.manor-nameplate {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(138px, 86%, 210px);
+  min-height: 79px;
+  padding: 8px 9px 5px;
+  border: 1px solid #d7b477;
+  outline: 3px solid #5f3e23;
+  outline-offset: -5px;
+  border-radius: 3px 3px 7px 7px;
+  background: linear-gradient(110deg, #d1ae72, #f0d8a9 45%, #dbb87c);
+  color: #352316;
+  box-shadow: 0 5px 10px #0d0708aa;
+  pointer-events: auto;
+  z-index: 5;
+  user-select: text;
+}
+.rear-seat .manor-nameplate {
+  bottom: 16%;
+}
+.table-scene:is(.manor-six, .manor-twelve) .seat-profile,
+.watch-mode .table-scene:is(.manor-six, .manor-twelve) .seat-profile {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  color: #352316;
+  font: inherit;
+  user-select: text;
+}
+.plate-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 21px;
+}
+.table-scene:is(.manor-six, .manor-twelve) .seat-number {
+  position: static;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  border: 1px solid #d7b477;
+  border-radius: 3px;
+  background: #5b3723;
+  color: #f4d59e;
+  font:
+    700 12px Georgia,
+    serif;
+  box-shadow: none;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .player-name {
+  font-size: clamp(12px, 1vw, 16px);
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #352316;
+  line-height: 23px;
+  max-width: 100%;
+}
+.life-mark {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 9px;
+  color: #4d5031;
+}
+.plate-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin-top: 4px;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .player-role {
+  display: block;
+  max-width: 76px;
+  padding: 1px 5px;
+  background: #67452b15;
+  border: 1px solid #6d4b2d40;
+  border-radius: 3px;
+  color: #624027;
+  font-size: 10px;
+  line-height: 14px;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .player-state {
+  margin: 0;
+  color: #624027;
+  font-size: 10px;
+  min-height: 14px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .seat-connection {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin: 4px 0 0;
+  padding: 1px 0;
+  border: 0;
+  background: none;
+  color: #5c472f;
+  font-size: 9px;
+  line-height: 13px;
+  text-align: center;
+  max-width: 100%;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .seat-connection.online {
+  color: #365b3a;
+}
+.table-scene:is(.manor-six, .manor-twelve) .player .seat-connection.offline {
+  color: #8e3024;
+}
+:is(.manor-six, .manor-twelve) .dead .manor-portrait {
+  filter: grayscale(0.85) brightness(0.65);
+}
+:is(.manor-six, .manor-twelve) .dead .life-mark {
+  color: #8b3026;
+  font-weight: 800;
+}
+:is(.manor-six, .manor-twelve) .dead .manor-nameplate {
+  background: linear-gradient(110deg, #b49c79, #d9c5a6, #baa17d);
+}
+:is(.manor-six, .manor-twelve) .acting .manor-nameplate,
+:is(.manor-six, .manor-twelve) .speaking .manor-nameplate {
+  outline-color: #e5b955;
+  box-shadow:
+    0 0 0 2px #ebc16e,
+    0 5px 20px #120b09;
+}
+:is(.manor-six, .manor-twelve) .speaking .manor-portrait {
+  filter: drop-shadow(0 0 4px #ffe2a1) drop-shadow(0 0 11px #daa34dcc);
+}
+:is(.manor-six, .manor-twelve) .pulsing .manor-portrait {
+  animation: manor-speaking 1.6s ease-in-out infinite;
+}
+@keyframes manor-speaking {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px #ffe2a1) drop-shadow(0 0 6px #daa34d88);
+  }
+  50% {
+    filter: drop-shadow(0 0 5px #ffe2a1) drop-shadow(0 0 16px #daa34dee);
+  }
+}
+.table-scene:is(.manor-six, .manor-twelve) .table-center,
+.watch-mode :is(.manor-six, .manor-twelve) .table-center {
+  display: none;
+}
+:is(.manor-six, .manor-twelve) .table-center .moon,
+.watch-mode :is(.manor-six, .manor-twelve) .table-center .moon,
+:is(.manor-six, .manor-twelve) .center-seal {
+  display: none;
+}
+:is(.manor-six, .manor-twelve) .table-center strong,
+.watch-mode :is(.manor-six, .manor-twelve) .table-center strong {
+  font:
+    500 17px Georgia,
+    'Noto Serif SC',
+    serif;
+  letter-spacing: 0.2em;
+  color: #f3d49d;
+  opacity: 0.65;
+}
+:is(.manor-six, .manor-twelve) .table-center > span {
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: #21130988;
+  font-size: 10px !important;
+  color: #edcf9e;
+}
+.manor-mode .speech-bubble {
+  background: rgba(40, 26, 17, 0.98);
+  border-color: #c99c53;
+  color: #f6e8ce;
+  box-shadow: 0 10px 40px #0d0709aa;
+}
+.manor-mode .speech-bubble .bubble-heading span {
+  color: #c9b28f;
+}
+.manor-mode .speech-bubble {
+  padding: 10px 12px;
+}
+.manor-mode .speech-bubble .bubble-heading {
+  gap: 4px;
+}
+.manor-mode .speech-bubble .bubble-heading b {
+  font-size: 11px;
+}
+.manor-mode .speech-bubble .bubble-heading span {
+  font-size: 8px;
+}
+.manor-mode .speech-bubble p {
+  font-size: 12px;
+  line-height: 1.8;
+}
+.manor-settings {
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #6a4b30;
+  border-radius: 12px;
+  background: #2c211b;
+}
+.manor-settings .full-label {
+  margin: 0;
+}
+.manor-settings select {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+}
+.manor-settings > p {
+  font-size: 11px;
+  line-height: 1.7;
+  color: #bea88b;
+  margin: 9px 0 0;
+}
+.manor-portrait-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+  color: #e1c99f;
+  font-size: 12px;
+}
+.manor-portrait-preview img {
+  height: 80px;
+  width: 65px;
+  object-fit: cover;
+  object-position: top;
+  border-radius: 8px;
+  background: #513b29;
+}
+.manor-portrait-preview small {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  color: #b9a48c;
+}
+.record-avatar img[data-portrait] {
+  object-position: 50% 15%;
+}
+@media (min-width: 1000px) {
+  .watch-mode.manor-mode #tableView {
+    max-width: 1920px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+    box-sizing: border-box;
+  }
+  .watch-mode.manor-mode #tableView > .page-heading,
+  .watch-mode.manor-mode .status-strip,
+  .watch-mode.manor-mode .spectator-toolbar {
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .game-layout {
+    flex: 1;
+    min-height: 0;
+  }
+  .watch-mode.manor-mode .table-panel {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head {
+    padding: 7px 15px;
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head .panel-kicker {
+    display: none;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head h2 {
+    margin: 0;
+    font-size: 13px;
+  }
+  .watch-mode.manor-mode .voice-status {
+    display: none;
+  }
+  .watch-mode.manor-mode .commentary-caption {
+    flex-shrink: 0;
+    max-height: 72px;
+    overflow: auto;
+  }
+  .watch-mode.manor-mode .table-stage {
+    flex: 1;
+    min-height: 0;
+    max-width: none;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .watch-mode.manor-mode .table-viewport {
+    width: min(calc(100% - 16px), calc((100dvh - 340px) * 1.6));
+    margin: 0 8px;
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .table-panel .table-scene:is(.manor-six, .manor-twelve) {
+    min-width: 640px;
+  }
+  .watch-mode.manor-mode .table-scroll-hint {
+    margin: 5px 0;
+    padding: 0;
+    line-height: 15px;
+  }
+  .watch-mode.manor-mode .table-legend {
+    padding: 8px 18px;
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .spectator-rail {
+    position: relative;
+    top: 0;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .watch-mode.manor-mode .spectator-rail.collapsed {
+    display: none;
+  }
+  .watch-mode.manor-mode .spectator-rail > .panel-head {
+    padding: 17px 16px 12px;
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .record-tabs,
+  .watch-mode.manor-mode .speech-filters,
+  .watch-mode.manor-mode .new-records {
+    flex-shrink: 0;
+  }
+  .watch-mode.manor-mode .records-viewport {
+    height: auto;
+    min-height: 70px;
+    flex: 1;
+  }
+}
+@media (min-width: 1000px) and (max-width: 1100px) {
+  .watch-mode.manor-mode .game-layout {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    gap: 12px;
+  }
+  .watch-mode.manor-mode .status-strip {
+    margin-bottom: 8px;
+  }
+  .watch-mode.manor-mode .phase-card,
+  .watch-mode.manor-mode .status-metric,
+  .watch-mode.manor-mode .stage-progress {
+    padding: 7px 14px;
+  }
+  .watch-mode.manor-mode .spectator-toolbar {
+    margin-bottom: 8px;
+  }
+  .watch-mode.manor-mode .commentary-caption {
+    min-height: 45px;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+  }
+  .watch-mode.manor-mode .commentary-caption p {
+    font-size: 11px;
+  }
+}
+@media (max-width: 1100px) and (min-width: 701px) {
+  .manor-mode .table-panel .table-scene:is(.manor-six, .manor-twelve) {
+    min-width: 800px;
+  }
+}
+@media (max-width: 700px) {
+  .manor-mode #tableView {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .manor-mode .table-panel .table-scene:is(.manor-six, .manor-twelve) {
+    min-width: 800px;
+  }
+  .manor-mode .spectator-rail {
+    background: #211914;
+    border-color: #987142;
+  }
+  .manor-mode .mobile-record-toggle {
+    background: #4c3421;
+    border-color: #b0854e;
+    color: #f1d59f;
+  }
+}
+@media (max-width: 700px) {
+  .manor-mode .spectator-rail {
+    height: 62dvh;
+    max-height: calc(100dvh - 120px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .manor-mode .spectator-rail.collapsed {
+    display: none;
+  }
+  .manor-mode .spectator-rail > .panel-head,
+  .manor-mode .spectator-rail .record-tabs,
+  .manor-mode .spectator-rail .speech-filters,
+  .manor-mode .spectator-rail .new-records {
+    flex-shrink: 0;
+  }
+  .manor-mode .spectator-rail .records-viewport,
+  .watch-mode.manor-mode .spectator-rail .records-viewport {
+    height: auto;
+    min-height: 60px;
+    flex: 1;
+  }
+  .watch-mode.manor-mode #tableView > .page-heading > div:first-child {
+    display: none;
+  }
+  .watch-mode.manor-mode .page-heading {
+    margin-bottom: 6px;
+  }
+  .watch-mode.manor-mode .status-strip {
+    margin-bottom: 8px;
+  }
+  .watch-mode.manor-mode .spectator-toolbar {
+    margin-bottom: 8px;
+  }
+  .watch-mode.manor-mode .voice-status {
+    display: none;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head .panel-kicker {
+    display: none;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head {
+    padding: 10px 12px;
+  }
+  .watch-mode.manor-mode .table-panel > .panel-head h2 {
+    font-size: 12px;
+    margin: 4px 0;
+  }
+  .watch-mode.manor-mode .commentary-caption {
+    min-height: 45px;
+    padding: 8px;
+  }
+  .watch-mode.manor-mode .table-tools {
+    max-width: 76%;
+    gap: 4px;
+  }
+  .watch-mode.manor-mode .seat-count {
+    display: none;
+  }
+  .watch-mode.manor-mode .table-viewport {
+    scroll-margin-top: 70px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.manor-six, .manor-twelve) .pulsing .manor-portrait {
+    animation: none;
+    filter: drop-shadow(0 0 5px #ffe2a1) drop-shadow(0 0 11px #daa34dcc);
+  }
+  :is(.manor-six, .manor-twelve) .manor-portrait {
+    transition: none;
+  }
+}
