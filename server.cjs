@@ -8,7 +8,7 @@ const {createAgentConfigStore,AgentConfigError,MAX_BYTES:AGENT_CONFIG_MAX_BYTES}
 const AgentRequest=require('./agent-request.js');
 const Limits=require('./limits.js');
 const {randomUUID}=require('node:crypto');
-const {requestAgent,requestAgentWithRetry}=require('./agent-transport.cjs');
+const {requestAgent,requestAgentWithRetry,createConnectionAgents}=require('./agent-transport.cjs');
 const {createAgentLogger,safeEntry}=require('./agent-log.cjs');
 const base=__dirname;
 const allowed=new Set(['index.html','styles.css','limits.js','app.js','engine.js','voices.js','observer.js','spectator.js','assets/rules-6.mp3','assets/rules-12.mp3','image-settings.html','image-settings.css','image-settings.js','manor.js','manor.css','manor-twelve.css','theme.css','soundfx.js','assets/music/manor-nocturne.wav','assets/sfx/wolf-howl-v3.wav',...require('./soundfx.js').names.map(n=>'assets/sfx/'+n+'.wav'),...['manor-room','manor-table',...Array.from({length:12},(_,i)=>'portrait-'+String(i+1).padStart(2,'0')).flatMap(id=>[id,id+'-thumb',id+'-closed'])].map(id=>'assets/manor/'+id+'.webp')]);
@@ -20,7 +20,7 @@ Object.values(require('./soundfx.js').musicTracks).forEach(file=>allowed.add(fil
 const loopback=new Set(['localhost','127.0.0.1','[::1]']);
 
 class ApiError extends Error {
-  constructor(status,code,message){super(message);this.status=status;this.code=code;}
+  constructor(status,code,message,extra){super(message);this.status=status;this.code=code;if(extra)Object.assign(this,extra);}
 }
 
 function normalizeEndpoint(endpoint){
@@ -68,6 +68,7 @@ function readJSON(req,limit){
 function validateChat(body){
   if(body?.purpose!==undefined&&!['connection-test','game-action'].includes(body.purpose))throw new ApiError(400,'INVALID_CONFIG','Agent 请求用途无效');
   if(body?.requestId!==undefined&&(typeof body.requestId!=='string'||!/^[-a-zA-Z0-9_]{1,80}$/.test(body.requestId)))throw new ApiError(400,'INVALID_CONFIG','Agent 请求编号无效');
+  if(body?.seat!==undefined&&(!Number.isInteger(body.seat)||body.seat<1||body.seat>12))throw new ApiError(400,'INVALID_CONFIG','连接测试席位无效');
   if(body?.gameId!==undefined&&(typeof body.gameId!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(body.gameId)))throw new ApiError(400,'INVALID_CONFIG','对局编号无效');
   if(body?.action!==undefined&&(!body.action||typeof body.action!=='object'||!['speech','night','vote','hunter'].includes(body.action.task)||body.action.role!==undefined&&!['狼人','守卫','预言家','女巫','猎人','平民'].includes(body.action.role)||!Number.isInteger(body.action.seat)||body.action.seat<1||body.action.seat>12||!Number.isInteger(body.action.round)||body.action.round<1||body.action.allowedTargets!==undefined&&(!Array.isArray(body.action.allowedTargets)||body.action.allowedTargets.length>12||body.action.allowedTargets.some(seat=>!Number.isInteger(seat)||seat<1||seat>12))))throw new ApiError(400,'INVALID_CONFIG','Agent 行动信息无效');
   if(!body||typeof body!=='object'||Array.isArray(body)||typeof body.endpoint!=='string'||body.endpoint.length>4096||typeof body.model!=='string'||!body.model.trim()||body.model.length>200){
@@ -164,6 +165,7 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     if(Buffer.byteLength(JSON.stringify(body))>options.maxRequestBytes)throw new ApiError(413,'REQUEST_TOO_LARGE','完整历史上下文超过本地服务的请求容量上限，系统未删减或概括内容，请检查容量后手动处理');
     const endpoint=normalizeEndpoint(body.endpoint);
     if(!gameAction&&options.activeGameRequests?.size)throw new ApiError(409,'GAME_REQUESTS_ACTIVE','当前仍有游戏 Agent 请求正在处理，请等待本局请求完成后再测试连接');
+    if(!gameAction)return await executeConnectionTest(body,endpoint,options,controller,startedAt);
     const requestTimeoutMs=gameAction?options.gameRequestTimeoutMs:Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs);
     if(requestTimeoutMs>0)timer=setTimeout(()=>{timedOut=true;controller.abort()},requestTimeoutMs);
     const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:gameAction?body.reasoningEffort:null,max_tokens:gameAction?Limits.ACTION_OUTPUT_MAX_TOKENS:Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS,actionTask:gameAction?body.action?.task:undefined,actionRole:gameAction?body.action?.role:undefined,allowedTargets:body.action?.allowedTargets,nightOptions:body.action?.nightOptions});
@@ -201,11 +203,125 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
   }catch(error){
     const failure=timedOut?new ApiError(504,'UPSTREAM_TIMEOUT',`接口等待超过 ${Math.ceil((gameAction?options.gameRequestTimeoutMs:options.connectionTimeoutMs)/1000)} 秒，请稍后重试`):controller.signal.aborted?new ApiError(499,'REQUEST_CANCELLED','请求已取消'):error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
     httpStatus??=failure.status;
+    if(!gameAction&&!failure.connectionLogged)options.agentLogger({event:'failed',task:'connection-test',requestId:randomUUID(),seat:body?.seat,code:failure.code,httpStatus:failure.status,durationMs:Date.now()-startedAt,errorMessage:failure.message});
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task)&&!diagnostic.assistantResponse)diagnostic.assistantResponse=assistantOutputText(responseData);
     log(controller.signal.aborted&&!timedOut?'cancelled':'failed',failure.code,{errorMessage:failure.message,assistantResponse:diagnostic?.assistantResponse});
     if(diagnostic)failure.requestId=diagnostic.requestId;
     throw failure;
   }finally{clearTimeout(timer);if(gameRequestKey)options.endGameRequest?.(gameRequestKey)}
+}
+
+// Connection tests prove endpoint, key, model and Responses parameters without waiting
+// for a whole answer: a streamed request succeeds at its first Responses event. A provider
+// that rejects streaming is retried once without it; one that ignores it is read as JSON.
+const CONNECTION_EVENT_BYTES=64*1024;
+function errorDetail(data){
+  return [data?.error?.code,data?.error?.type,data?.error?.param,data?.error?.message,data?.error,data?.code,data?.param,data?.message].filter(v=>typeof v==='string').join(' ').toLowerCase();
+}
+function streamRejected(status,data){return [400,406,415,422].includes(status)&&/\bstream(?:ing)?\b|event-stream|\bsse\b/.test(errorDetail(data))}
+async function readFirstStreamEvent(response,controller){
+  if(!response.body)throw new ApiError(502,'INVALID_RESPONSE','接口流式响应为空，请确认使用 Responses 接口');
+  const reader=response.body.getReader(),decoder=new TextDecoder();
+  let text='',bytes=0,flushed=false;
+  try{
+    while(true){
+      const {done,value}=await reader.read();
+      if(value){bytes+=value.byteLength;text+=decoder.decode(value,{stream:true});}
+      let match;
+      while((match=/\r?\n\r?\n/.exec(text))){
+        const lines=text.slice(0,match.index).split(/\r?\n/);text=text.slice(match.index+match[0].length);
+        const data=lines.filter(line=>line.startsWith('data:')).map(line=>line.slice(5).replace(/^ /,'')).join('\n').trim();
+        if(!data||data==='[DONE]')continue;
+        let event;
+        try{event=JSON.parse(data)}catch{throw new ApiError(502,'INVALID_RESPONSE','接口返回的流式事件不是有效 JSON，请确认使用 Responses 接口');}
+        const name=lines.find(line=>line.startsWith('event:'))?.slice(6).trim()||'';
+        return {type:typeof event?.type==='string'?event.type:name,event};
+      }
+      if(done&&text.trim()&&!flushed){flushed=true;text+='\n\n';continue;}
+      if(done)throw new ApiError(502,'INVALID_RESPONSE','接口流式响应已结束，但未返回 Responses 事件，请确认使用 Responses 接口');
+      if(bytes>CONNECTION_EVENT_BYTES){controller.abort();throw new ApiError(502,'INVALID_RESPONSE','接口流式响应缺少事件分隔，请确认使用 Responses 接口');}
+    }
+  }finally{try{reader.releaseLock()}catch{}}
+}
+function streamEventFailure({type,event},reasoningEffort){
+  if(['error','response.failed','response.error'].includes(type)){
+    const error=event?.error||event?.response?.error||(type==='error'?event:undefined);
+    const status=[error?.status,event?.status].find(value=>Number.isInteger(value)&&value>=400&&value<=599)||502;
+    return upstreamError(status,{error},reasoningEffort);
+  }
+  if(!type.startsWith('response.'))return new ApiError(502,'RESPONSES_UNSUPPORTED','接口返回的流式数据不是 Responses 事件，请核对 Responses 地址（/v1/responses）与模型支持情况');
+  return null;
+}
+// Reaching the test's small output budget still proves the request was accepted.
+function checkConnectionResponse(data){
+  if(data?.status==='incomplete'&&data.incomplete_details?.reason==='max_output_tokens')return;
+  AgentRequest.responseText(data);
+}
+async function executeConnectionTest(body,endpoint,options,outer,startedAt){
+  const controller=new AbortController(),forward=()=>controller.abort();
+  if(outer.signal.aborted)controller.abort();else outer.signal.addEventListener('abort',forward,{once:true});
+  const totalMs=Math.max(1,Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs));
+  const connectMs=Math.max(1,Math.min(options.connectionConnectTimeoutMs||totalMs,totalMs));
+  const reasoningEffort=body.reasoningEffort===undefined?null:body.reasoningEffort;
+  const elapsed=()=>Date.now()-startedAt,timing={};
+  let timedOut=false,httpStatus,mode='stream',succeeded=false,result,failure,attempts,host;
+  try{host=new URL(endpoint).host}catch{}
+  const timer=setTimeout(()=>{timedOut=true;controller.abort()},totalMs);
+  const send=async stream=>{
+    const remaining=Math.max(1,totalMs-elapsed());
+    const requestBody=AgentRequest.responsesBody({model:body.model,messages:body.messages,reasoning_effort:reasoningEffort,max_tokens:Limits.CONNECTION_TEST_OUTPUT_MAX_TOKENS,stream});
+    try{
+      const response=await options.connectionFetchImpl(endpoint,{
+        method:'POST',redirect:'error',signal:controller.signal,
+        timeoutMs:remaining,connectTimeoutMs:Math.min(connectMs,remaining),
+        retries:options.connectionRetries,retryDelayMs:options.connectionRetryDelayMs,agent:options.connectionAgents,
+        headers:{'Content-Type':'application/json',Accept:stream?'text/event-stream':'application/json',...(body.apiKey?{Authorization:'Bearer '+body.apiKey.trim()}:{})},
+        body:JSON.stringify(requestBody)
+      });
+      timing.headersMs??=elapsed();httpStatus=response.status;
+      return response;
+    }catch(error){attempts=Number.isInteger(error?.attempts)?error.attempts:undefined;throw error;}
+  };
+  try{
+    let response=await send(true);
+    if(response.ok&&/text\/event-stream/i.test(response.headers?.get?.('content-type')||'')){
+      const first=await readFirstStreamEvent(response,controller);
+      timing.firstEventMs=elapsed();
+      const streamFailure=streamEventFailure(first,reasoningEffort||undefined);
+      if(streamFailure)throw streamFailure;
+      response.body.cancel().catch(()=>{});
+      result={};
+    }else{
+      let data=await readUpstream(response,controller);
+      if(!response.ok&&streamRejected(response.status,data)){
+        mode='fallback';
+        response=await send(false);data=await readUpstream(response,controller);
+      }else mode='json';
+      if(!response.ok)throw upstreamError(response.status,data,reasoningEffort||undefined);
+      checkConnectionResponse(data);
+      result=data?.status==='completed'?AgentRequest.gameResponse(data):{};
+    }
+    succeeded=true;timing.durationMs=elapsed();
+    return {...result,connection:{ok:true,mode,...timing}};
+  }catch(error){
+    const seconds=ms=>Math.ceil(ms/1000);
+    if(timedOut&&timing.headersMs!==undefined)failure=new ApiError(504,'UPSTREAM_TIMEOUT',`接口已连通（HTTP ${httpStatus}），但 ${seconds(totalMs)} 秒内未返回模型结果，响应较慢；对局中单次请求最长等待 ${seconds(options.gameRequestTimeoutMs)} 秒，可稍后重试`,{stage:'response'});
+    else if(timedOut)failure=new ApiError(504,'UPSTREAM_TIMEOUT',`接口等待超过 ${seconds(totalMs)} 秒仍未响应，请检查接口地址、网络或代理后重试`,{stage:'connect'});
+    else if(outer.signal.aborted)failure=new ApiError(499,'REQUEST_CANCELLED','请求已取消');
+    else if(error?.connectTimeout)failure=new ApiError(504,'UPSTREAM_TIMEOUT',`连接接口超时：${attempts||1} 次尝试均未在 ${seconds(connectMs)} 秒内收到响应，请检查接口地址、网络或代理后重试`,{stage:'connect'});
+    else failure=error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
+    httpStatus??=failure.status;failure.connectionLogged=true;
+    throw failure;
+  }finally{
+    clearTimeout(timer);outer.signal.removeEventListener('abort',forward);
+    if(mode==='stream'||!succeeded)controller.abort();
+    options.agentLogger({
+      event:succeeded?'response_received':outer.signal.aborted&&!timedOut?'cancelled':'failed',
+      task:'connection-test',requestId:randomUUID(),seat:body.seat,endpointHost:host,model:body.model,reasoningEffort:reasoningEffort||undefined,
+      connectionMode:mode,code:failure?.code,stage:failure?.stage,attempts,httpStatus,durationMs:elapsed(),headersMs:timing.headersMs,firstEventMs:timing.firstEventMs,
+      errorMessage:failure?.message
+    });
+  }
 }
 
 async function handleChat(req,res,options){
@@ -224,7 +340,7 @@ async function handleChat(req,res,options){
     if(disconnected||res.destroyed)return;
     const failure=error instanceof ApiError||error instanceof AgentRequest.ResponseError?error:upstreamNetworkError(error);
     if(failure.code==='GAME_REQUESTS_ACTIVE')res.setHeader('Retry-After','1');
-    sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message},...(failure.requestId?{requestId:failure.requestId}:{})});
+    sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message,...(failure.stage?{stage:failure.stage}:{})},...(failure.requestId?{requestId:failure.requestId}:{})});
   }finally{req.off('aborted',cancel);res.off('close',close)}
 }
 
@@ -363,12 +479,12 @@ async function handleAgentConfig(req,res,store){
     sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message}});
   }
 }
-function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,gameRequestTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
+function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionConnectTimeoutMs=Limits.AGENT_CONNECTION_CONNECT_TIMEOUT_MS,connectionAgents=createConnectionAgents(),connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,gameRequestTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
   const instanceVersion=randomUUID();
   const activeGameRequests=new Map();
   const beginGameRequest=(key,details)=>activeGameRequests.set(key,{...details,startedAt:Date.now()});
   const endGameRequest=key=>activeGameRequests.delete(key);
-  const chatOptions={fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,gameRequestTimeoutMs,maxRequestBytes,agentLogger,activeGameRequests,beginGameRequest,endGameRequest};
+  const chatOptions={fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionConnectTimeoutMs,connectionAgents,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,gameRequestTimeoutMs,maxRequestBytes,agentLogger,activeGameRequests,beginGameRequest,endGameRequest};
   const speechOptions={fetchImpl,speechTimeoutMs,synthesizeImpl,state:{active:0}};
   const stories=require('./story-api.cjs').createStoryAPI({fetchImpl,store:storyStore,config:videoConfigStore,jobs:videoJobs,artJobs,imageConfig:imageConfigStore,readJSON,sendJSON,validateChat,normalizeEndpoint,readUpstream,upstreamError});
   const recordings=require('./recording-api.cjs').createRecordingAPI({sendJSON,readJSON,...recordingOptions});
@@ -408,7 +524,7 @@ function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetc
       res.end(req.method==='HEAD'?undefined:data);
     });
   });
-  server.once('listening',()=>{if(recoverVideoJobs)void stories.recover()});server.once('close',()=>{recordings.close();void stories.close()});server.storyService=stories;
+  server.once('listening',()=>{if(recoverVideoJobs)void stories.recover()});server.once('close',()=>{recordings.close();void stories.close();for(const agent of Object.values(connectionAgents||{}))agent?.destroy?.()});server.storyService=stories;
   return server;
 }
 

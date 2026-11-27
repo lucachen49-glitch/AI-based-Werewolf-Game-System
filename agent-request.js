@@ -30,12 +30,12 @@
     return url.href;
   }
 
-  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,max_tokens=OUTPUT_MAX_TOKENS,actionTask,actionRole,allowedTargets,nightOptions}){
+  function responsesBody({model,messages,reasoning_effort=DEFAULT_REASONING_EFFORT,max_tokens=OUTPUT_MAX_TOKENS,actionTask,actionRole,allowedTargets,nightOptions,stream=false}){
     const body={
       model:model.trim(),
       input:messages.map(message=>({role:message.role,content:inputContent(message.content)})),
       max_output_tokens:max_tokens,
-      stream:false,
+      stream:stream===true,
       store:false
     };
     if(reasoning_effort!==null)body.reasoning={effort:normalizeReasoningEffort(reasoning_effort)};
