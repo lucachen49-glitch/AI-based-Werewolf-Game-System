@@ -26,7 +26,7 @@ function recordingUpdateControls(){
 }
 async function recordingRequest(url,options={}){
   const response=await fetch(url,options);const data=await response.json();
-  if(!response.ok)throw Error(data.error?.message||'本地录像服务不可用');return data;
+  if(!response.ok)throw Object.assign(Error(data.error?.message||'本地录像服务不可用'),{status:response.status});return data;
 }
 function recordingJSON(data){return {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}}
 function recordingTime(ms){const seconds=Math.floor(ms/1000);return String(Math.floor(seconds/60)).padStart(2,'0')+':'+String(seconds%60).padStart(2,'0')}
@@ -119,7 +119,7 @@ async function prepareRecording(token){
         let lastError;
         for(let attempt=0;attempt<3;attempt++){
           try{await recordingRequest('/api/recordings/'+session.id+'/chunks/'+index,{method:'PUT',headers:{'Content-Type':'application/octet-stream'},body:event.data});return}
-          catch(error){lastError=error;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)))}
+          catch(error){lastError=error;if(error.status===507)break;await new Promise(resolve=>setTimeout(resolve,1000*(attempt+1)))}
         }
         throw lastError;
       }).catch(error=>{session.failed=true;recordingStatus('录像写入失败，正在保留已保存片段。'+error.message);if(!session.stopping)stopRecording(false)});

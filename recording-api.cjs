@@ -10,6 +10,13 @@ const {run}=require('./video-media.cjs');
 const rootDir=path.join(__dirname,'output','recordings');
 const idPattern=/^[a-f0-9-]{36}$/;
 const chunkLimit=24*1024*1024;
+const GiB=1024*1024*1024;
+const gb=bytes=>String(Math.round(bytes/GiB*10)/10);
+// Free space of the volume holding dir; null when the platform or Node version cannot tell.
+async function diskFreeBytes(dir){
+  if(typeof fs.statfs!=='function')return null;
+  try{const s=await fs.statfs(dir);return Number(s.bavail)*Number(s.bsize)}catch{return null}
+}
 class RecordingError extends Error {
   constructor(status,message){super(message);this.status=status;}
 }
@@ -19,7 +26,7 @@ async function convert(source,target,job={}){
     '-c:v','libx264','-preset','veryfast','-crf','20','-pix_fmt','yuv420p','-c:a','aac','-b:a','160k',
     '-movflags','+faststart',target],2*60*60*1000);
 }
-function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,leaseMs=45000}){
+function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,leaseMs=45000,maxTotalBytes=4*GiB,minFreeBytes=2*GiB,freeBytes=diskFreeBytes}){
   const jobs=new Map(),processing=new Map();
   let loaded,interval,queue=Promise.resolve();
   const dir=job=>path.join(root,job.id);
@@ -29,7 +36,7 @@ function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,le
   const files=async folder=>fs.readdir(folder).catch(e=>{if(e.code==='ENOENT')return [];throw e});
   const chunks=async job=>(await files(dir(job))).filter(n=>/^\d{9}\.chunk$/.test(n)).sort();
   async function save(job,patch={}){
-    const {liveUntil,pending,transcriptEntries,...data}={...job,...patch};
+    const {liveUntil,pending,transcriptEntries,bytes,...data}={...job,...patch};
     const file=path.join(dir(job),'recording.json');
     await fs.writeFile(file+'.tmp',JSON.stringify(data));
     await fs.rename(file+'.tmp',file);
@@ -92,17 +99,25 @@ function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,le
       }catch{
         await fs.rm(temp,{force:true}).catch(()=>{});
         const hasRaw=await fs.stat(source).then(s=>s.size>0,()=>false);
-        await save(job,{status:'failed',hasRaw,reason:hasRaw?'MP4 合成失败，已保留原始 WebM。':'暂时无法合并，已保留收到的录制片段。'}).catch(()=>{});
+        const reason=job.reason||(hasRaw?'MP4 合成失败，已保留原始 WebM。':'暂时无法合并，已保留收到的录制片段。');
+        await save(job,{status:'failed',hasRaw,reason}).catch(()=>{});
       }
     });
     processing.set(job.id,task);
     queue=task.catch(()=>{}).finally(()=>processing.delete(job.id));
   }
-  async function finish(job,complete,expected){
+  const storageFull=message=>new RecordingError(507,message);
+  async function recordedBytes(job){
+    if(Number.isFinite(job.bytes))return job.bytes;
+    let total=0;
+    for(const name of await chunks(job)){try{total+=(await fs.stat(path.join(dir(job),name))).size}catch{}}
+    return job.bytes=total;
+  }
+  async function finish(job,complete,expected,reason){
     if(job.status!=='recording')return;
     const count=(await chunks(job)).length;
     await save(job,{status:'saving',chunks:count,complete:complete&&count===expected,
-      reason:complete&&count===expected?'':'录制中断，保存已收到的片段。'});
+      reason:complete&&count===expected?'':reason||'录制中断，保存已收到的片段。'});
     assemble(job);
   }
   function exclusive(job,action){
@@ -133,6 +148,12 @@ function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,le
     if(index>job.chunks)throw new RecordingError(409,'录制片段顺序不一致。');
     if(index<job.chunks){req.resume();return}
     if(Number(req.headers['content-length'])>chunkLimit)throw new RecordingError(413,'录制片段过大。');
+    const used=await recordedBytes(job),declared=Number(req.headers['content-length'])||0;
+    const totalMessage='本局录像已达到 '+gb(maxTotalBytes)+' GB 上限，已停止录制并保存已录片段。';
+    const diskMessage='磁盘剩余空间不足 '+gb(minFreeBytes)+' GB，已停止录制并保存已录片段。';
+    if(used+declared>maxTotalBytes){req.resume();await finish(job,false,undefined,totalMessage);throw storageFull(totalMessage)}
+    const free=await freeBytes(root);
+    if(free!==null&&free-declared<minFreeBytes){req.resume();await finish(job,false,undefined,diskMessage);throw storageFull(diskMessage)}
     const file=path.join(dir(job),String(index).padStart(9,'0')+'.chunk');
     let length=0;
     try{
@@ -141,12 +162,18 @@ function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,le
         for await(const buffer of req){
           length+=buffer.length;
           if(length>chunkLimit)throw new RecordingError(413,'录制片段过大。');
+          if(used+length>maxTotalBytes)throw storageFull(totalMessage);
+          const available=await freeBytes(root);
+          if(available!==null&&available-buffer.length<minFreeBytes)throw storageFull(diskMessage);
           yield buffer;
         }
       })()),createWriteStream(file+'.part'));
       if(!length)throw new RecordingError(400,'录制片段为空。');
       await fs.rename(file+'.part',file);
-      job.chunks++;
+      job.chunks++;job.bytes=used+length;
+    }catch(error){
+      if(error?.status===507&&job.status==='recording')await finish(job,false,undefined,error.message);
+      throw error;
     }finally{job.liveUntil=Date.now()+leaseMs;await fs.rm(file+'.part',{force:true}).catch(()=>{})}
   }
   async function sendMedia(req,res,job,extension,download){
@@ -184,6 +211,9 @@ function createRecordingAPI({sendJSON,readJSON,root=rootDir,transcode=convert,le
           const {roomSize,story,capture}=await readJSON(req,4096);
           if(capture&&(capture.version!=='portrait-1080-v2'||capture.width!==1080||capture.height!==1920||!['region','element'].includes(capture.mode)||![capture.sourceWidth,capture.sourceHeight].every(n=>Number.isFinite(n)&&n>0&&n<=16384)||!capture.region||capture.region.width<=0||capture.region.height<=0||capture.region.x+capture.region.width>capture.sourceWidth+1||capture.region.y+capture.region.height>capture.sourceHeight+1||![capture.region.x,capture.region.y,capture.region.width,capture.region.height].every(n=>Number.isFinite(n)&&n>=0&&n<=16384)))throw new RecordingError(400,'录屏画面尺寸无效，请重新开始。');
           if(roomSize!==6&&roomSize!==12)throw new RecordingError(400,'录制房间人数无效。');
+          await fs.mkdir(root,{recursive:true});
+          const free=await freeBytes(root);
+          if(free!==null&&free<minFreeBytes)throw storageFull('磁盘剩余空间不足 '+gb(minFreeBytes)+' GB，暂不能开始录制，请清理磁盘后重试。');
           const id=randomUUID(),createdAt=new Date().toISOString();
           const job={id,createdAt,roomSize,...(capture?{capture:{version:capture.version,width:1080,height:1920,mode:capture.mode,sourceWidth:capture.sourceWidth,sourceHeight:capture.sourceHeight,region:capture.region}}:{}),story:story===true,complete:false,chunks:0,status:'recording',liveUntil:Date.now()+leaseMs,
             filename:'nightfall-'+createdAt.replace(/[:.]/g,'-').replace('Z','')+'-'+roomSize+'-'+id};

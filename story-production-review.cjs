@@ -1,6 +1,7 @@
 "use strict";
 const AgentRequest=require("./agent-request.js");
 const Limits=require("./limits.js");
+const PRODUCTION_REVIEW_REASONING_EFFORT="xhigh";
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const os = require("node:os");
@@ -101,7 +102,7 @@ function report(raw, story, agent) {
     model: agent.model,
     protocol: AgentRequest.PROTOCOL,
     maxOutputTokens: AgentRequest.OUTPUT_MAX_TOKENS,
-    reasoningEffort: AgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
+    reasoningEffort: PRODUCTION_REVIEW_REASONING_EFFORT,
     checkedAt: new Date().toISOString(),
   };
 }
@@ -116,7 +117,7 @@ function createProductionReviewer({
       endpoint: input?.endpoint,
       model: input?.model,
       apiKey: input?.apiKey || "",
-      reasoningEffort: input?.reasoningEffort || "xhigh",
+      reasoningEffort: PRODUCTION_REVIEW_REASONING_EFFORT,
       messages: [{ role: "user", content: "检查制作素材" }],
     };
     validateChat(agent);
@@ -142,7 +143,7 @@ function createProductionReviewer({
         body: JSON.stringify(AgentRequest.responsesBody({
           model: agent.model,
           messages,
-          reasoning_effort: agent.reasoningEffort,
+          reasoning_effort: PRODUCTION_REVIEW_REASONING_EFFORT,
         })),
       });
       let size = 0,
@@ -156,7 +157,7 @@ function createProductionReviewer({
       try{data=JSON.parse(Buffer.concat(chunks));}
       catch(error){if(r.ok)throw error;}
       if(!r.ok){
-        const reasoning=AgentRequest.reasoningFailure(r.status,data,agent.reasoningEffort)||AgentRequest.protocolFailure(r.status,data);
+        const reasoning=AgentRequest.reasoningFailure(r.status,data,PRODUCTION_REVIEW_REASONING_EFFORT)||AgentRequest.protocolFailure(r.status,data);
         if(reasoning)throw new StoryError(reasoning.status,reasoning.code,reasoning.message);
       }
       if (!r.ok)
@@ -225,7 +226,7 @@ function createProductionReviewer({
       model: agent.model,
       protocol: AgentRequest.PROTOCOL,
       maxOutputTokens: AgentRequest.OUTPUT_MAX_TOKENS,
-      reasoningEffort: AgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
+      reasoningEffort: PRODUCTION_REVIEW_REASONING_EFFORT,
       checkedAt: new Date().toISOString(),
     };
   }

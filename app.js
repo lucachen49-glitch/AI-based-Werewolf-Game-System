@@ -17,13 +17,15 @@ function readLocalProfileRecord(){
   let savedAt=localStorage.getItem(PROFILE_SAVED_AT_KEY)||null;if(savedAt&&!Number.isFinite(Date.parse(savedAt)))savedAt=null;
   return {profiles,savedAt};
 }
+function inputTokenNote(attempt){const n=attempt?.inputTokens??attempt?.attempt?.inputTokens;return Number.isFinite(n)?' 预计输入约 '+n+' tokens。':''}
 function buildProfiles(saved){
   const source=Array.isArray(saved)||(saved&&typeof saved==='object')?saved:{};
   return Array.from({length:12},(_,i)=>{
     const stored=source[i]&&typeof source[i]==='object'?source[i]:{};
     const rememberKey=stored.rememberKey!==false;
     const reasoningEffort=NightfallAgentRequest.normalizeReasoningEffort(stored.reasoningEffort);
-    return {name:NAMES[i],avatar:AVATARS[i],control:'local',endpoint:'',model:'',reasoningEffort,personality:PERSONALITIES[i%6],...Voices.settings(stored,i),avatar:Avatar.normalize(stored.avatar,i),voiceMatch:Manor.voiceMatchMode(stored,i,Voices.defaults(i)),manorPortrait:Manor.normalize(stored.manorPortrait,i),rememberKey,key:rememberKey&&typeof stored.key==='string'?stored.key:'',voiceKey:stored.rememberVoiceKey!==false&&typeof stored.voiceKey==='string'?stored.voiceKey:'',connection:'untested',connectionError:''};
+    const historyContext=stored.historyContext==='full'?'full':'recent';
+    return {name:NAMES[i],avatar:AVATARS[i],control:'local',endpoint:'',model:'',reasoningEffort,historyContext,personality:PERSONALITIES[i%6],...Voices.settings(stored,i),avatar:Avatar.normalize(stored.avatar,i),voiceMatch:Manor.voiceMatchMode(stored,i,Voices.defaults(i)),manorPortrait:Manor.normalize(stored.manorPortrait,i),rememberKey,key:rememberKey&&typeof stored.key==='string'?stored.key:'',voiceKey:stored.rememberVoiceKey!==false&&typeof stored.voiceKey==='string'?stored.voiceKey:'',connection:'untested',connectionError:''};
   });
 }
 function loadProfiles(){return buildProfiles(readLocalProfileRecord().profiles)}
@@ -420,7 +422,7 @@ function renderAction(){
     apiTitle=title;
     apiDetail=hiddenNight?'夜间秘密行动正在等待接口或本地席位处理。':Object.values(voting.batch.items).map(item=>{
       const attempt=item.attempt,elapsed=Math.max(0,Math.floor(((attempt?.endedAt||Date.now())-(attempt?.startedAt||voting.startedAt))/1000));
-      return (item.id+1)+' 号 · '+labels[item.status]+' · '+elapsed+' 秒。'+(item.error?' '+item.error.message:'')+(attempt?.requestId?' 请求编号 '+attempt.requestId+'。':'');
+      return (item.id+1)+' 号 · '+labels[item.status]+' · '+elapsed+' 秒。'+(item.error?' '+item.error.message:'')+(attempt?.requestId?' 请求编号 '+attempt.requestId+'。':'')+inputTokenNote(attempt);
     }).join('\n');
     if(!hiddenNight)detail+=' '+apiDetail;
   }else if(currentAPI){
@@ -434,7 +436,7 @@ function renderAction(){
       kicker=apiWaiting?'ACTION PAUSED':'WAITING FOR RESPONSE';
       title=apiWaiting?'已暂停 · 当前行动未完成':hidden?'正在等待接口返回':(currentAPI.id+1)+' 号 · 正在等待接口返回';
       detail=apiWaiting?(hidden?'夜间行动遇到接口问题，请检查配置并手动重试。':currentAPI.message+' 本次用时 '+elapsed+' 秒。')+' 点击“重试当前行动”后重新请求。':(hidden?'夜间秘密行动正在等待接口返回，已等待 '+elapsed+' 秒。':'当前行动正在等待接口返回，已等待 '+elapsed+' 秒。')+(paused?' 对局已暂停，返回结果会保留至继续对局。':'');
-      if(!hidden)detail+=' 请求编号 '+currentAPI.requestId+'。';
+      if(!hidden)detail+=' 请求编号 '+currentAPI.requestId+'。'+inputTokenNote(currentAPI);
       apiTitle=title;apiDetail=detail;
     }
   }
@@ -463,7 +465,7 @@ function connectionBadge(profile,seat=false){
 }
 function renderConnectionViews(){renderAgents();renderPlayers();renderStatus()}
 function setConnection(profile,state,error=''){profile.connection=state;profile.connectionError=error;if(profiles.includes(profile))renderConnectionViews()}
-function renderAgents(){$('agentCount').textContent=`${size} 个席位`;$('configuredCount').textContent=profiles.slice(0,size).filter(p=>p.control==='api').length;$('agentGrid').innerHTML=profiles.slice(0,size).map((p,i)=>`<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i+1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control==='api'&&p.connection==='error'&&p.connectionError?`<p class="agent-error">${esc(p.connectionError)}${!p.key?'；此席位未填写密钥，请补填并保存。':''}</p>`:''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control==='local'?'规则模拟引擎':p.model||'未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control==='local'?'无需网络':p.endpoint||'未填写')}</strong></div></div>${p.control==='api'?`<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)==='high'?'高（high）':'超高（xhigh）'}</p>`:''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p,i),i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p,i),i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`).join('');}
+function renderAgents(){$('agentCount').textContent=`${size} 个席位`;$('configuredCount').textContent=profiles.slice(0,size).filter(p=>p.control==='api').length;$('agentGrid').innerHTML=profiles.slice(0,size).map((p,i)=>`<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i+1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control==='api'&&p.connection==='error'&&p.connectionError?`<p class="agent-error">${esc(p.connectionError)}${!p.key?'；此席位未填写密钥，请补填并保存。':''}</p>`:''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control==='local'?'规则模拟引擎':p.model||'未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control==='local'?'无需网络':p.endpoint||'未填写')}</strong></div></div>${p.control==='api'?`<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)==='high'?'高（high）':'超高（xhigh）'}</p><p class="agent-reasoning">历史上下文 · ${p.historyContext==='full'?'完整历史':'最近两轮发言'}</p>`:''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p,i),i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p,i),i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`).join('');}
 function renderRules(){$('ruleTitle').textContent=BOARDS[ruleSize].title;document.querySelectorAll('.rule-mode').forEach(b=>b.classList.toggle('active',+b.dataset.rule===ruleSize));$('ruleSections').innerHTML=rulesHTML(ruleSize);}
 function switchView(next){if(typeof recordingOpenConfig==='function'&&typeof activeRecording!=='undefined'&&activeRecording){if(next!=='table'){recordingOpenConfig();if(portraitMode)setPortraitMode(false,true)}else recordingCloseConfig()}if(next!=='rules'&&narration?.kind==='rules'&&$('rulesBackdrop').classList.contains('hidden'))stopNarration();view=next;document.querySelectorAll('.content').forEach(x=>x.classList.add('hidden'));$(next+'View').classList.remove('hidden');document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===next));renderSpectator();}
 function reset(nextSize=size){if(speechFailure){const pending=speechFailure;speechFailure=null;pending.resolve('cancel')}if(typeof stopRecording==='function')stopRecording(false);if(typeof recordingConfigPause!=='undefined')recordingConfigPause=null;epoch++;cancelVoteBatch();cancelPreparedSpeech();clearTimeout(agentPending?.timer);agentPending=null;apiWaiting=null;wakeAPIWait();if(typeof resetStory==='function')resetStory();if(connectionBatch)connectionBatch.cancelled=true;stopNarration();resetSpectator();voiceMessage='';$('rulesBackdrop').classList.add('hidden');activeRequest?.abort();releaseWait();busy=false;paused=false;activeSeat=null;actionText='';runError='';autoTask=null;size=nextSize;ruleSize=size;gameId=newGameId();game=new Nightfall.Game(size);logCursor=0;feed=[];transcript=[];addFeed('✦',BOARDS[size].title+' 已就绪。点击开始后随机发牌，全席位自动对局。','notice');renderAll()}
@@ -526,7 +528,7 @@ async function apiCall(profile,messages,{maxTokens,attempt,allowedTargets,role,n
   const timer=attempt?null:setTimeout(()=>controller.abort(),Limits.AGENT_BROWSER_TIMEOUT_MS||185000);
   try{
     if(controller.signal.aborted)throw Object.assign(Error('已取消等待'),{name:'AbortError'});
-    if(attempt)attempt.sent=true;
+    if(attempt){attempt.sent=true;attempt.inputTokens=NightfallAgentRequest.estimateInputTokens(messages);renderAction()}
     const res=await fetch('/api/chat',{
       method:'POST',headers:{'Content-Type':'application/json'},cache:'no-store',redirect:'error',
       body:JSON.stringify({endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,messages,maxTokens,purpose:attempt?'game-action':'connection-test',...(attempt?{reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),gameId,requestId:attempt.requestId,action:{task:attempt.task,seat:attempt.id+1,round:attempt.round,...(role?{role}:{}),...(['vote','night'].includes(attempt.task)&&Array.isArray(allowedTargets)?{allowedTargets}:{}),...(attempt.task==='night'&&nightOptions?{nightOptions}:{})}}:{})}),signal:controller.signal
@@ -651,8 +653,10 @@ async function decision(id,task,extra={},preparation=null){
   }
   return {};
 }
+const RECENT_HISTORY_ROUNDS=2;
 function buildAgentContext(id,task,extra={}){
-    const context=game.context(id,profiles.map((p,i)=>name(i)),{includeAllSpeeches:['vote','night'].includes(task),includeAllPublicEvents:['vote','night'].includes(task)});context.allowedTargets=game.legalTargets(id,task);
+    const decision=['vote','night'].includes(task),fullHistory=decision&&profiles[id]?.historyContext==='full';
+    const context=game.context(id,profiles.map((p,i)=>name(i)),{includeAllSpeeches:fullHistory,recentSpeechRounds:decision&&!fullHistory?RECENT_HISTORY_ROUNDS:null,includeAllPublicEvents:decision});context.allowedTargets=game.legalTargets(id,task);
     if(task==='night'&&game.players[id].role==='女巫'){
       const options=game.witchOptions(extra.victim??null);
       context.nightRules={canSave:options.canSave,poisonAvailable:options.poisonAvailable};
@@ -947,9 +951,11 @@ async function submitVoteItems(batch,items){
         if(item.signature!==speechConfigSignature(profiles[item.id])){invalidateVoteAgent(item.id);return}
         if(!profile.endpoint||!profile.model)throw Object.assign(Error('请填写接口地址和模型'),{code:'INVALID_CONFIG'});
         setConnection(profiles[item.id],'testing');
+        const seatMessages=agentMessages(item.id,profile,task,item.context);
+        attempt.inputTokens=NightfallAgentRequest.estimateInputTokens(seatMessages);
         requests.push({
           endpoint:profile.endpoint,model:profile.model,apiKey:profile.key,
-          messages:agentMessages(item.id,profile,task,item.context),
+          messages:seatMessages,
           maxTokens:Limits.ACTION_OUTPUT_MAX_TOKENS,
           reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),
           purpose:'game-action',gameId,requestId:attempt.requestId,
@@ -1085,11 +1091,11 @@ async function hunter(token=epoch){
   if(result===null||!await waitForTurn(token))return;
   game.shoot(result.target??null);syncLogs();if(game.phase==='discussion')addObserver({kind:'discussion',round:game.round,publicText:'技能结算完成，现在请存活玩家依次发言。',godText:'技能结算完成，现在请存活玩家依次发言。'});renderAll();
 }
-function openAgent(id){if(connectionBatch||connectionTests){toast('正在测试连接，请等待测试完成后修改配置');return}if(busy&&!paused&&!apiWaiting){toast('请先暂停对局，再修改席位配置');return}if(typeof recordingOpenConfig==='function')recordingOpenConfig();selectedAgent=id;lastConnectionTest=null;const p=profiles[id];draftAvatar=p.avatar;lastFocus=document.activeElement;$('modalTitle').textContent=`${id+1} 号 · ${p.name}`;$('modalSubtitle').textContent='独立配置形象、人格与模型，不会暴露本局身份。';$('nameInput').value=p.name;$('controlInput').value=p.control;$('modelInput').value=p.model;$('endpointInput').value=p.endpoint;$('reasoningEffortInput').value=NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort);$('keyInput').value=p.key;$('rememberKeyInput').checked=p.rememberKey;$('keyInput').type='password';$('showKey').textContent='显示';$('personalityInput').value=p.personality;$('avatarUpload').value='';fillVoiceForm(p,id);fillManorForm(p,id);updateVoiceMatch();$('connectionState').textContent='API 协议 · Responses，支持网站地址、/v1 或完整路径，测试会产生一次请求';renderAvatarPicker();$('modalBackdrop').classList.remove('hidden');$('nameInput').focus()}
+function openAgent(id){if(connectionBatch||connectionTests){toast('正在测试连接，请等待测试完成后修改配置');return}if(busy&&!paused&&!apiWaiting){toast('请先暂停对局，再修改席位配置');return}if(typeof recordingOpenConfig==='function')recordingOpenConfig();selectedAgent=id;lastConnectionTest=null;const p=profiles[id];draftAvatar=p.avatar;lastFocus=document.activeElement;$('modalTitle').textContent=`${id+1} 号 · ${p.name}`;$('modalSubtitle').textContent='独立配置形象、人格与模型，不会暴露本局身份。';$('nameInput').value=p.name;$('controlInput').value=p.control;$('modelInput').value=p.model;$('endpointInput').value=p.endpoint;$('reasoningEffortInput').value=NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort);$('historyContextInput').value=p.historyContext==='full'?'full':'recent';$('keyInput').value=p.key;$('rememberKeyInput').checked=p.rememberKey;$('keyInput').type='password';$('showKey').textContent='显示';$('personalityInput').value=p.personality;$('avatarUpload').value='';fillVoiceForm(p,id);fillManorForm(p,id);updateVoiceMatch();$('connectionState').textContent='API 协议 · Responses，支持网站地址、/v1 或完整路径，测试会产生一次请求';renderAvatarPicker();$('modalBackdrop').classList.remove('hidden');$('nameInput').focus()}
 function fillManorForm(profile,seat){$('manorPortraitInput').innerHTML=Manor.portraits.map(p=>'<option value="'+p.id+'">'+esc(p.name+' · '+p.description+(p.pending?'（立绘待制作）':''))+'</option>').join('')+'<option value="avatar">使用当前头像</option>';$('manorPortraitInput').value=Manor.normalize(profile.manorPortrait,seat);renderManorPreview()}
 function renderManorPreview(){const id=$('manorPortraitInput').value,art=Manor.portraits.find(p=>p.id===id);$('manorPortraitPreview').innerHTML=art&&!art.pending?'<img src="'+Manor.imagePath(id,true)+'" alt="'+esc(art.name)+'"><span>'+esc(art.description)+'<small>6 / 12 人间通用 · 外观不代表身份</small></span>':'<span>使用当前卡通头像<small>新增六位专属立绘待确认制作；原头像与配置保留</small></span>'}
 function renderAvatarPicker(){$('avatarPicker').innerHTML=AVATARS.map(a=>`<button class="avatar-option ${draftAvatar===a?'selected':''}" data-avatar="${esc(a)}" aria-label="选择 ${esc(a)}">${esc(a)}</button>`).join('')+(Avatar.valid(draftAvatar)&&draftAvatar.startsWith('data:')?`<img class="uploaded-preview" src="${esc(draftAvatar)}" alt="已上传的头像">`:'')}
-function modalProfile(){return {...profiles[selectedAgent],name:$('nameInput').value.trim()||NAMES[selectedAgent],avatar:Avatar.normalize(draftAvatar,selectedAgent),manorPortrait:Manor.normalize($('manorPortraitInput').value,selectedAgent),control:$('controlInput').value,model:$('modelInput').value.trim(),endpoint:$('endpointInput').value.trim(),reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort($('reasoningEffortInput').value),key:$('keyInput').value.trim(),rememberKey:$('rememberKeyInput').checked,personality:$('personalityInput').value.trim()||PERSONALITIES[selectedAgent%6],...voiceForm(),connection:'untested',connectionError:''}}
+function modalProfile(){return {...profiles[selectedAgent],name:$('nameInput').value.trim()||NAMES[selectedAgent],avatar:Avatar.normalize(draftAvatar,selectedAgent),manorPortrait:Manor.normalize($('manorPortraitInput').value,selectedAgent),control:$('controlInput').value,model:$('modelInput').value.trim(),endpoint:$('endpointInput').value.trim(),reasoningEffort:NightfallAgentRequest.normalizeReasoningEffort($('reasoningEffortInput').value),historyContext:$('historyContextInput').value==='full'?'full':'recent',key:$('keyInput').value.trim(),rememberKey:$('rememberKeyInput').checked,personality:$('personalityInput').value.trim()||PERSONALITIES[selectedAgent%6],...voiceForm(),connection:'untested',connectionError:''}}
 
 function fillVoiceForm(profile,seat){
   const p=Voices.settings(profile,seat);

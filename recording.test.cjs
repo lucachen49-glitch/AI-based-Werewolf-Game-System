@@ -50,6 +50,33 @@ test('录制片段按顺序写入，重复上传去重，合成失败后保留�
   assert.equal((await fetch(base+prefix+'/media/mp4',{headers:{Origin:'http://example.com'}})).status,403);
 });
 
+test('录制达到总字节上限时返回 507 并保留已收到的片段',async t=>{
+  const {request,wait,base}=await setup(t,{maxTotalBytes:3,minFreeBytes:0,freeBytes:async()=>null,transcode:async()=>{throw Error('保留原始测试录像')}});
+  const {data:job}=await request('/api/recordings','POST',{roomSize:6});
+  const prefix='/api/recordings/'+job.id;
+  assert.equal((await request(prefix+'/chunks/0','PUT',Buffer.from('ab'))).response.status,200);
+  const rejected=await request(prefix+'/chunks/1','PUT',Buffer.from('cd'));
+  assert.equal(rejected.response.status,507);
+  assert.match(rejected.data.error.message,/上限/);
+  const saved=await wait(job.id,'failed');
+  assert.equal(saved.chunks,1);
+  assert.equal(await (await fetch(base+saved.rawUrl)).text(),'ab');
+});
+
+test('剩余磁盘空间不足时开录与分片上传均返回 507',async t=>{
+  let available=9;
+  const {request,wait}=await setup(t,{minFreeBytes:10,freeBytes:async()=>available,transcode:async()=>{throw Error('无分片')}});
+  const blocked=await request('/api/recordings','POST',{roomSize:6});
+  assert.equal(blocked.response.status,507);
+  available=100;
+  const {data:job}=await request('/api/recordings','POST',{roomSize:6});
+  available=10;
+  const rejected=await request('/api/recordings/'+job.id+'/chunks/0','PUT',Buffer.from('a'));
+  assert.equal(rejected.response.status,507);
+  assert.match(rejected.data.error.message,/磁盘剩余空间不足/);
+  await wait(job.id,'empty');
+});
+
 test('剪辑稿条目按稳定编号合并并导出 JSON、TXT、SRT、VTT',async t=>{
   const {request,root,server,base}=await setup(t);
   const {data:job}=await request('/api/recordings','POST',{roomSize:6});

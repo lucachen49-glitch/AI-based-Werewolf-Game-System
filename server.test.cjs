@@ -7,6 +7,7 @@ const {once}=require('node:events');
 const {Readable}=require('node:stream');
 const {randomUUID}=require('node:crypto');
 const {createServer,normalizeEndpoint}=require('./server.cjs');
+const AgentRequest=require('./agent-request.js');
 
 async function listen(t,server){
   server.listen(0,'127.0.0.1');await once(server,'listening');
@@ -25,7 +26,7 @@ async function fixture(t,options={}){
     }catch{if(!res.destroyed)res.end();}
   });
   const endpoint=await listen(t,provider);
-  const base=await listen(t,createServer({agentLogger:()=>{},...options,recoverVideoJobs:false}));
+  const base=await listen(t,createServer({agentLogger:()=>{},allowLoopbackUpstream:true,...options,recoverVideoJobs:false}));
   const profile={endpoint,apiKey:'test-secret-only',model:'gpt-6-astra',messages:[{role:'user',content:'Reply with OK.'}]};
   const post=(body={},config={})=>fetch(`${base}/api/chat`,{method:'POST',headers:{Origin:base,'Content-Type':'application/json',...config.headers},body:JSON.stringify({...profile,...body}),...config});
   return {base,endpoint,profile,post,seen};
@@ -47,8 +48,39 @@ test('隔离测试服务不恢复用户视频任务，正式服务仍自动恢�
 
 test('地址补全只处理根地址和 /v1，保留完整自定义路径',()=>{
   for(const suffix of ['','/','/v1','/v1/','/v1///'])assert.equal(normalizeEndpoint(`https://api.hualong-ai.com${suffix}`),'https://api.hualong-ai.com/v1/responses');
-  for(const endpoint of ['https://example.test/v1/chat/completions','https://example.test/custom/chat?version=2','http://localhost:1234/v1/chat/completions'])assert.equal(normalizeEndpoint(endpoint),endpoint.replace(/\/chat\/completions(?=\?|$)/,'/responses'));
+  for(const endpoint of ['https://example.test/v1/chat/completions','https://example.test/custom/chat?version=2','http://localhost:1234/v1/chat/completions'])assert.equal(normalizeEndpoint(endpoint,{allowLoopback:true}),endpoint.replace(/\/chat\/completions(?=\?|$)/,'/responses'));
   for(const endpoint of ['bad address','ftp://example.test','http://example.test','https://user:password@example.test'])assert.throws(()=>normalizeEndpoint(endpoint));
+});
+
+test('本机 Agent 上游默认关闭，显式开启后允许回环 HTTP',async t=>{
+  for(const endpoint of ['http://localhost:11434/api','http://127.0.0.2:1234/v1','http://[::1]:8080/v1']){
+    assert.throws(()=>normalizeEndpoint(endpoint),error=>error.status===400&&/NIGHTFALL_ALLOW_LOCAL_UPSTREAM=1/.test(error.message));
+    assert.equal(normalizeEndpoint(endpoint,{allowLoopback:true}),AgentRequest.responsesEndpoint(endpoint));
+  }
+  let targetHit=false;
+  const target=await listen(t,http.createServer((req,res)=>{targetHit=true;res.end(JSON.stringify(agentResponse('OK')))}));
+  const {base,post}=await fixture(t,{allowLoopbackUpstream:false});
+  const response=await post({endpoint:target});
+  assert.equal(response.status,400);
+  assert.match((await response.json()).error.message,/NIGHTFALL_ALLOW_LOCAL_UPSTREAM=1/);
+  assert.equal(targetHit,false);
+  const enabled=await fixture(t,{allowLoopbackUpstream:true});
+  const allowedResponse=await enabled.post({endpoint:target});
+  assert.equal(allowedResponse.status,200);
+  assert.equal(targetHit,true);
+});
+
+test('本机 Agent 上游默认值由环境变量显式控制',()=>{
+  const previous=process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM;
+  try{
+    delete process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM;
+    assert.throws(()=>normalizeEndpoint('http://localhost:11434/v1'),error=>error.status===400);
+    process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM='1';
+    assert.equal(normalizeEndpoint('http://localhost:11434/v1'),AgentRequest.responsesEndpoint('http://localhost:11434/v1'));
+  }finally{
+    if(previous===undefined)delete process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM;
+    else process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM=previous;
+  }
 });
 
 test('关键视觉素材接口通过统一故事路由暴露',async t=>{
@@ -278,7 +310,7 @@ test('6/12 人自然讲解 MP3 可播放下载及 HEAD 查询，制作脚本和�
 
 test('推理强度缺省和显式值按配置转发，其他值在提交前拒绝', async t => {
   const {post, seen} = await fixture(t);
-  for (const [body, expected] of [[{purpose:'game-action'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'xhigh'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'high'}, 'high']]) {
+  for (const [body, expected] of [[{purpose:'game-action'}, 'high'], [{purpose:'game-action',reasoningEffort:'xhigh'}, 'xhigh'], [{purpose:'game-action',reasoningEffort:'high'}, 'high']]) {
     assert.equal((await post(body)).status, 200);
     assert.equal(seen.at(-1).body.reasoning.effort, expected);
   }
@@ -297,7 +329,7 @@ test('供应商拒绝 xhigh 时保留明确错误且不泄露凭据、不自动�
       res.end(JSON.stringify({error:{code:'unsupported_value', param:'reasoning_effort',
         message:'reasoning_effort xhigh is not supported; test-secret-only'}}));
     }});
-    const response = await post({purpose:'game-action'});
+    const response = await post({purpose:'game-action',reasoningEffort:'xhigh'});
     assert.equal(response.status, status);
     const data = await response.json();
     assert.equal(data.error.code, 'REASONING_EFFORT_UNSUPPORTED');

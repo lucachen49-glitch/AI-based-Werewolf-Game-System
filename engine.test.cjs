@@ -70,6 +70,20 @@ test('投票上下文可带入超过120条的完整公开发言并保留轮次�
  assert.equal(night.publicEvents.length,26);
  assert.deepEqual(night.publicEvents.at(-1),{round:5,phase:'voting',text:'公开事件25'});
 });
+test('recent 上下文只保留最近两轮发言，full 保留全部，6/12 人公开事件始终完整',()=>{
+ for(const size of [6,12]){
+  const g=fixed(size);g.round=4;
+  g.speechHistory=Array.from({length:size*4},(_,i)=>({id:i%size,text:'发言'+(i+1),round:Math.floor(i/size)+1,pk:i%7===0}));
+  g.logs=Array.from({length:19},(_,i)=>({text:'事件'+(i+1),round:Math.floor(i/size)+1,phase:'voting'}));
+  const recent=g.context(0,[],{recentSpeechRounds:2,includeAllPublicEvents:true});
+  const full=g.context(0,[],{includeAllSpeeches:true,includeAllPublicEvents:true});
+  assert.equal(recent.speeches.length,size*2);
+  assert.equal(recent.speeches[0].round,3);assert.equal(recent.speeches.at(-1).round,4);
+  assert.equal(full.speeches.length,size*4);
+  assert.equal(recent.publicEvents.length,19);assert.equal(full.publicEvents.length,19);
+ }
+});
+
 test('普通与PK发言记录、Agent上下文统一截断到1400个Unicode字符',()=>{const g=fixed();g.phase='discussion';const long='狼人🧛'.repeat(500);g.addSpeech(0,long);assert.equal(Array.from(g.speeches[0].text).length,1400);assert.equal(g.speechHistory[0].text,g.speeches[0].text);assert.equal(g.context(1).speeches[0].text,g.speeches[0].text);g.pk=[0,1];g.recordSpeech(1,long);assert.equal(Array.from(g.speeches[0].text).length,1400);assert.equal(g.speechHistory[1].text,g.speeches[0].text)});
 
 test('API 目标统一使用1起始座位号，守卫信息只对自己可见',()=>{const g=fixed(12);g.lastGuard=0;assert.equal(g.context(7).lastGuard,1);assert.equal(g.context(8).lastGuard,undefined);assert.equal(g.legalTargets(7,'night').includes(1),false);assert.ok(g.legalTargets(7,'night').includes(8));assert.deepEqual(g.legalTargets(0,'night'),[1,2,3,4,5,6,7,8,9,10,11,12]);g.pk=[8,9];assert.deepEqual(g.legalTargets(8,'vote'),[]);assert.deepEqual(g.legalTargets(7,'vote'),[9,10])});

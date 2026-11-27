@@ -67,9 +67,14 @@
     }
     shoot(target){if(this.phase!=='hunter')throw Error('当前没有猎人技能');if(target!==null&&target!==undefined){const p=this.players[Number(target)];if(p?.alive){p.alive=false;p.cause='hunter';this.event(`猎人带走了 ${p.id+1} 号玩家。`)}}else this.event('猎人放弃开枪。');this.pendingHunter=null;if(!this.checkWinner()){if(this.afterHunter==='night')this.nextNight();else this.phase='discussion'}}
     nextNight(){this.round++;this.phase='night';this.speeches=[];this.event(`第 ${this.round} 夜开始。`)}
-    context(id, names = [], { includeAllSpeeches = false, includeAllPublicEvents = false } = {}) {
+    context(id, names = [], { includeAllSpeeches = false, includeAllPublicEvents = false, recentSpeechRounds = null } = {}) {
       const player = this.players[id];
-      const speeches = includeAllSpeeches ? this.speechHistory : this.speechHistory.slice(-120);
+      // recentSpeechRounds keeps every speech from the latest N rounds (current round included).
+      const speeches = includeAllSpeeches
+        ? this.speechHistory
+        : Number.isInteger(recentSpeechRounds) && recentSpeechRounds > 0
+          ? this.speechHistory.filter(item => item.round > this.round - recentSpeechRounds)
+          : this.speechHistory.slice(-120);
       const events = includeAllPublicEvents ? this.logs : this.logs.slice(-16);
       return {
         seat: id + 1,

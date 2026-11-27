@@ -14,13 +14,26 @@ const lifecycleFile=path.join(runtime,'game-lifecycle.log');
 const stdoutFile=path.join(runtime,'game.stdout.log');
 const stderrFile=path.join(runtime,'game.stderr.log');
 const delays=[1000,2000,5000,10000,30000,60000];
-let server=null,stopping=false,restartCount=0,timer=null,stopPoll=null,nextLogCleanupAt=0;
+const STABLE_RUN_MS=60000;
+// Restart delays grow on repeated crashes and reset once a server has stayed up for STABLE_RUN_MS.
+function createRestartBackoff({steps=delays,stableMs=STABLE_RUN_MS,setTimer=setTimeout,clearTimer=clearTimeout}={}){
+  let count=0,stableTimer=null;
+  const clearStable=()=>{if(stableTimer!==null)clearTimer(stableTimer);stableTimer=null};
+  return {
+    get attempts(){return count},
+    started(){clearStable();stableTimer=setTimer(()=>{count=0;stableTimer=null},stableMs);stableTimer?.unref?.()},
+    exited(){clearStable()},
+    next(){return steps[Math.min(count++,steps.length-1)]}
+  };
+}
+const backoff=createRestartBackoff();
+let server=null,stopping=false,timer=null,stopPoll=null,nextLogCleanupAt=0;
 
 function stamp(){return new Date().toISOString()}
 function append(file,text){fs.appendFileSync(file,text,{encoding:'utf8'})}
 function log(event,details=''){append(lifecycleFile,stamp()+' '+event+(details?' '+details:'')+'\n')}
 function pidAlive(pid){try{process.kill(pid,0);return true}catch{return false}}
-function delay(){return delays[Math.min(restartCount++,delays.length-1)]}
+function delay(){return backoff.next()}
 function wait(ms){return new Promise(resolve=>{timer=setTimeout(resolve,ms)})}
 function cleanupRuntimeLogs(){if(Date.now()<nextLogCleanupAt)return;cleanSystemLogs({directory:runtime});nextLogCleanupAt=Date.now()+60*60*1000;}
 
@@ -41,15 +54,17 @@ async function start(){
 
 function launchServer(){
   if(stopping)return;
-  log('SERVER_START',`attempt=${restartCount+1} port=${process.env.PORT||4173}`);
+  log('SERVER_START',`attempt=${backoff.attempts+1} port=${process.env.PORT||4173}`);
   server=spawn(process.execPath,[path.join(root,'server.cjs')],{cwd:root,stdio:['ignore','pipe','pipe'],windowsHide:true,env:process.env});
   const child=server;
+  backoff.started();
   const stdoutWriter=createTimestampedWriter(stdoutFile,append);
   const stderrWriter=createTimestampedWriter(stderrFile,append);
   child.stdout.on('data',chunk=>stdoutWriter.write(chunk));
   child.stderr.on('data',chunk=>stderrWriter.write(chunk));
   child.once('error',error=>{log('SERVER_SPAWN_ERROR',JSON.stringify({message:error.message,code:error.code}));});
   child.once('exit',(code,signal)=>{
+    backoff.exited();
     stdoutWriter.flush();stderrWriter.flush();
     const childPid=child.pid;server=null;
     log('SERVER_EXIT',`pid=${childPid||'unknown'} code=${code===null?'null':code} signal=${signal||'none'}`);
@@ -107,9 +122,12 @@ async function status(){
   const pid=Number(fs.readFileSync(pidFile,'utf8').trim());console.log(pidAlive(pid)?`游戏服务后台运行中（管理进程 ${pid}），地址：http://127.0.0.1:${process.env.PORT||4173}`:'游戏服务未运行（PID 记录已失效）。');
 }
 
-const action=process.argv[2]||'start';
-if(action==='run')void run();
-else if(action==='start')void start().catch(error=>{console.error(error.message);process.exitCode=1});
-else if(action==='stop')void requestStop().catch(error=>{console.error(error.message);process.exitCode=1});
-else if(action==='status')void status().catch(error=>{console.error(error.message);process.exitCode=1});
-else{console.error('用法：node service-manager.cjs start|stop|status');process.exitCode=2}
+if(require.main===module){
+  const action=process.argv[2]||'start';
+  if(action==='run')void run();
+  else if(action==='start')void start().catch(error=>{console.error(error.message);process.exitCode=1});
+  else if(action==='stop')void requestStop().catch(error=>{console.error(error.message);process.exitCode=1});
+  else if(action==='status')void status().catch(error=>{console.error(error.message);process.exitCode=1});
+  else{console.error('用法：node service-manager.cjs start|stop|status');process.exitCode=2}
+}
+module.exports={createRestartBackoff,STABLE_RUN_MS,delays};

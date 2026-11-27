@@ -5,7 +5,7 @@
 })(globalThis,()=>{
   const PROTOCOL='responses';
   const OUTPUT_MAX_TOKENS=25000;
-  const DEFAULT_REASONING_EFFORT='xhigh';
+  const DEFAULT_REASONING_EFFORT='high';
   const SUPPORTED_REASONING_EFFORTS=['high','xhigh'];
   function normalizeReasoningEffort(value){return SUPPORTED_REASONING_EFFORTS.includes(value)?value:DEFAULT_REASONING_EFFORT;}
 
@@ -209,5 +209,13 @@
     return {status,code:'RESPONSES_UNSUPPORTED',message:parameter?'当前模型或接口拒绝 Responses 参数 '+parameter+'（HTTP '+status+'）。请检查模型支持和接口配置后手动重试。':'当前模型或接口不支持 Responses（HTTP '+status+'）。请检查 Responses 地址和模型支持情况后手动重试。'};
   }
 
-  return {PROTOCOL,OUTPUT_MAX_TOKENS,DEFAULT_REASONING_EFFORT,SUPPORTED_REASONING_EFFORTS,normalizeReasoningEffort,responsesEndpoint,responsesBody,responseText,parseActionJSON,gameResponse,ResponseError,reasoningFailure,protocolFailure};
+  // Rough input size for the waiting panel: CJK characters ~1 token each, other characters ~4 per token.
+  const CJK=/[\u3000-\u303f\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef\uac00-\ud7af]/;
+  function estimateInputTokens(value){
+    const text=typeof value==='string'?value:JSON.stringify(value??'');
+    let cjk=0,other=0;
+    for(const ch of text)if(CJK.test(ch))cjk++;else other++;
+    return cjk+Math.ceil(other/4);
+  }
+  return {estimateInputTokens,PROTOCOL,OUTPUT_MAX_TOKENS,DEFAULT_REASONING_EFFORT,SUPPORTED_REASONING_EFFORTS,normalizeReasoningEffort,responsesEndpoint,responsesBody,responseText,parseActionJSON,gameResponse,ResponseError,reasoningFailure,protocolFailure};
 });

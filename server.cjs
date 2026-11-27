@@ -25,11 +25,20 @@ class ApiError extends Error {
   constructor(status,code,message){super(message);this.status=status;this.code=code;}
 }
 
-function normalizeEndpoint(endpoint){
+const localUpstreamDefault=()=>process.env.NIGHTFALL_ALLOW_LOCAL_UPSTREAM==='1';
+function isLocalHost(hostname){
+  const host=hostname.toLowerCase().replace(/\.$/,'');
+  return loopback.has(host)||host.endsWith('.localhost')||host==='0.0.0.0'||host==='[::]'||/^127(?:\.\d{1,3}){3}$/.test(host)||/^\[::ffff:(?:127\.|7f)/.test(host);
+}
+// Upstreams on this machine are opt-in, so the local service cannot be used to probe other local ports.
+function normalizeEndpoint(endpoint,{allowLoopback=localUpstreamDefault()}={}){
   let url;
   try{url=new URL(endpoint)}catch{throw new ApiError(400,'INVALID_ENDPOINT','接口地址格式不正确，请填写完整的网址');}
-  if(url.username||url.password||!(url.protocol==='https:'||(url.protocol==='http:'&&loopback.has(url.hostname)))){
+  if(url.username||url.password||!(url.protocol==='https:'||(url.protocol==='http:'&&isLocalHost(url.hostname)))){
     throw new ApiError(400,'INVALID_ENDPOINT','请使用 HTTPS 地址，或本机 HTTP 接口');
+  }
+  if(!allowLoopback&&isLocalHost(url.hostname)){
+    throw new ApiError(400,'INVALID_ENDPOINT','本机模型接口默认关闭。如需连接 Ollama、LM Studio 等本机服务，请设置环境变量 NIGHTFALL_ALLOW_LOCAL_UPSTREAM=1 后重启游戏服务。');
   }
   return AgentRequest.responsesEndpoint(url.href);
 }
@@ -164,7 +173,7 @@ async function executeChat(body,options,controller,onRequest=()=>{}){
     validateChat(body);
     if(diagnostic&&['speech','vote','night','hunter'].includes(body.action?.task))diagnostic.requestContext=body.messages;
     if(Buffer.byteLength(JSON.stringify(body))>options.maxRequestBytes)throw new ApiError(413,'REQUEST_TOO_LARGE','完整历史上下文超过本地服务的请求容量上限，系统未删减或概括内容，请检查容量后手动处理');
-    const endpoint=normalizeEndpoint(body.endpoint);
+    const endpoint=(options.normalizeEndpoint||normalizeEndpoint)(body.endpoint);
     if(!gameAction&&options.activeGameRequests?.size)throw new ApiError(409,'GAME_REQUESTS_ACTIVE','当前仍有游戏 Agent 请求正在处理，请等待本局请求完成后再测试连接');
     const requestTimeoutMs=gameAction?options.gameRequestTimeoutMs:Math.min(options.upstreamTimeoutMs,options.connectionTimeoutMs);
     if(requestTimeoutMs>0)timer=setTimeout(()=>{timedOut=true;controller.abort()},requestTimeoutMs);
@@ -365,14 +374,15 @@ async function handleAgentConfig(req,res,store){
     sendJSON(res,failure.status,{error:{code:failure.code,message:failure.message}});
   }
 }
-function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,gameRequestTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore()}={}){
+function createServer({fetchImpl=fetch,gameFetchImpl=requestAgent,connectionFetchImpl=fetchImpl===fetch?requestAgentWithRetry:fetchImpl,connectionTimeoutMs=Limits.AGENT_CONNECTION_TIMEOUT_MS,connectionRetries=1,connectionRetryDelayMs=150,agentLogger=createAgentLogger(),agentGameLogDirectory=path.join(base,'logs','agent-games'),upstreamTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,gameRequestTimeoutMs=Limits.AGENT_UPSTREAM_TIMEOUT_MS,maxRequestBytes=1024*1024,speechTimeoutMs=Limits.SPEECH_UPSTREAM_TIMEOUT_MS,synthesizeImpl,imageConfigStore=createImageConfigStore(),storyStore,videoConfigStore,videoJobs,artJobs,recordingOptions,recoverVideoJobs=true,agentConfigStore=createAgentConfigStore(),allowLoopbackUpstream=localUpstreamDefault()}={}){
   const instanceVersion=randomUUID();
   const activeGameRequests=new Map();
   const beginGameRequest=(key,details)=>activeGameRequests.set(key,{...details,startedAt:Date.now()});
   const endGameRequest=key=>activeGameRequests.delete(key);
-  const chatOptions={fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,gameRequestTimeoutMs,maxRequestBytes,agentLogger,activeGameRequests,beginGameRequest,endGameRequest};
+  const endpointFor=endpoint=>normalizeEndpoint(endpoint,{allowLoopback:allowLoopbackUpstream});
+  const chatOptions={normalizeEndpoint:endpointFor,fetchImpl,connectionFetchImpl,gameFetchImpl,connectionTimeoutMs,connectionRetries,connectionRetryDelayMs,upstreamTimeoutMs,gameRequestTimeoutMs,maxRequestBytes,agentLogger,activeGameRequests,beginGameRequest,endGameRequest};
   const speechOptions={fetchImpl,speechTimeoutMs,synthesizeImpl,state:{active:0}};
-  const stories=require('./story-api.cjs').createStoryAPI({fetchImpl,store:storyStore,config:videoConfigStore,jobs:videoJobs,artJobs,imageConfig:imageConfigStore,readJSON,sendJSON,validateChat,normalizeEndpoint,readUpstream,upstreamError});
+  const stories=require('./story-api.cjs').createStoryAPI({fetchImpl,store:storyStore,config:videoConfigStore,jobs:videoJobs,artJobs,imageConfig:imageConfigStore,readJSON,sendJSON,validateChat,normalizeEndpoint:endpointFor,readUpstream,upstreamError});
   const recordings=require('./recording-api.cjs').createRecordingAPI({sendJSON,readJSON,...recordingOptions});
   const server=http.createServer((req,res)=>{
     if(!validHost(req))return sendJSON(res,403,{error:{code:'INVALID_HOST',message:'请使用本机游戏地址访问'}});

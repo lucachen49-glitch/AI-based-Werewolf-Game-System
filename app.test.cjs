@@ -99,7 +99,7 @@ test('Agent 不接收剧本秘密且上下文缓存，角色名临时替换；12
   const originalName=vm.runInContext('profiles[0].name',context),S=require('./scenario.js');
   const privateStory={...story,characters:story.characters.map((c,i)=>({...c,secret:'独有秘密'+(i+1)}))};
   context.fetch=async(url,options)=>{if(url==='/api/chat'){requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({choices:[{message:{content:'{"speech":"我是来客1，先听听大家的判断。"}'}}]})}}gets.push(url);return {ok:true,json:async()=>S.context(privateStory,Number(/context\/(\d)/.exec(url)[1]))}};
-  vm.runInContext("sessionStory=storyFixture;game.start();profiles[0].control='api';profiles[0].endpoint='https://chat.test';profiles[0].model='selected-chat';profiles[0].key='test-chat-key'",context);
+  vm.runInContext("sessionStory=storyFixture;game.start();profiles[0].control='api';profiles[0].reasoningEffort='xhigh';profiles[0].endpoint='https://chat.test';profiles[0].model='selected-chat';profiles[0].key='test-chat-key'",context);
   await vm.runInContext("decision(0,'speech')",context);await vm.runInContext("decision(0,'speech')",context);
   assert.equal(gets.length,1);assert.match(gets[0],/context\/1\?version=1$/);
   for(const r of requests){const text=JSON.stringify(r.messages);assert.doesNotMatch(text,/独有秘密[1-6]/);assert.match(text,/来客1/)}
@@ -317,6 +317,7 @@ test('六人和十二人投票与夜间请求使用完整公开历史并按角�
       'size=historyFixture.roomSize;',
       'game=new Nightfall.Game(size).start();',
       'game.players.forEach((player,index)=>player.role=Nightfall.ROLES[size][index]);',
+      'profiles.forEach(profile=>profile.historyContext="full");',
       'game.phase="night";game.round=4;game.players[size-1].alive=false;game.lastGuard=0;',
       'game.potions={save:true,poison:false};',
       'game.speechHistory=Array.from({length:125},(_,index)=>({id:index%size,text:"完整发言"+(index+1),round:Math.floor(index/size)+1,pk:index===123}));',
@@ -376,6 +377,20 @@ test('六人和十二人投票与夜间请求使用完整公开历史并按角�
     const spentWitch=JSON.parse(read('JSON.stringify(buildAgentContext('+witchId+',"night",{victim:1}))'));
     assert.equal(spentWitch.tonightVictim,undefined);
     assert.equal(spentWitch.nightRules.canSave,false);
+  }
+});
+
+test('默认 recent 与显式 full 在 6/12 人对局中按最近两轮筛选发言',()=>{
+  const {context}=setup(new Map(),false),read=code=>vm.runInContext(code,context);
+  for(const size of [6,12]){
+    context.historyFixture={size};
+    read('size=historyFixture.size;game=new Nightfall.Game(size).start();game.players.forEach((player,index)=>player.role=Nightfall.ROLES[size][index]);game.round=4;game.phase=\"voting\";game.speechHistory=Array.from({length:size*4},(_,i)=>({id:i%size,text:\"发言\"+(i+1),round:Math.floor(i/size)+1,pk:i%5===0}));game.logs=Array.from({length:17},(_,i)=>({text:\"事件\"+(i+1),round:Math.floor(i/size)+1,phase:\"voting\"}));profiles.forEach(profile=>profile.historyContext=\"recent\");');
+    const recent=JSON.parse(read('JSON.stringify(buildAgentContext(0,\"vote\"))'));
+    assert.equal(recent.speeches.length,size*2);assert.equal(recent.speeches[0].round,3);assert.equal(recent.speeches.at(-1).round,4);
+    assert.equal(recent.publicEvents.length,17);
+    read('profiles[0].historyContext=\"full\"');
+    const full=JSON.parse(read('JSON.stringify(buildAgentContext(0,\"night\"))'));
+    assert.equal(full.speeches.length,size*4);assert.equal(full.publicEvents.length,17);
   }
 });
 
@@ -1939,7 +1954,7 @@ test('六人与十二人旧 Agent 配置恢复后发言上限、token预算及 x
       return {ok:true, json:async () => ({choices:[{message:{content:JSON.stringify({speech:'发'.repeat(1501),target:null,save:false,poison:null})}}]})};
     };
     read('reset(' + count + ')');
-    read("profiles[0].control='api';profiles[0].endpoint='https://example.test/v1';profiles[0].model='test-model-" + count + "';profiles[0].key='test-key';persist();game.start();game.players[0].role='狼人'");
+    read("profiles[0].control='api';profiles[0].reasoningEffort='xhigh';profiles[0].endpoint='https://example.test/v1';profiles[0].model='test-model-" + count + "';profiles[0].key='test-key';persist();game.start();game.players[0].role='狼人'");
     assert.equal(read('profiles[0].reasoningEffort'), 'xhigh');
     for (const task of ['night', 'speech', 'vote', 'hunter']) {
       const result=await read('decision(0,' + JSON.stringify(task) + ')');
@@ -2492,10 +2507,10 @@ test('无声字幕阅读期间提前结果不提前写入录屏对白，结束�
   assert.equal(chat.length,2);
 });
 
-function votingHarness(t,{size=6,pk=false,locals=[],dead=[],ignoreAbort=false,extraSpeeches=0}={}){
+function votingHarness(t,{size=6,pk=false,locals=[],dead=[],ignoreAbort=false,extraSpeeches=0,historyContext='recent'}={}){
   const {context}=setup(new Map(),false,true,false,true),groups=[],events=[],uploads=[];
   const read=code=>vm.runInContext(code,context);
-  read('reset('+size+');game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES['+size+'][i]);game.phase="discussion";game.players.forEach(p=>game.addSpeech(p.id,"公开完整发言"+(p.id+1)));game.openVoting();busy=true;turnDelay=0;portraitMode=true;flushCommentary=async()=>true;aiSpeeches=async()=>{};profiles.slice(0,'+size+').forEach((p,i)=>Object.assign(p,{control:"api",endpoint:"https://example.test/v1",model:"seat-"+(i+1),key:"private-key-"+(i+1),reasoningEffort:i%2?"high":"xhigh"}));');
+  read('reset('+size+');game.start();game.players.forEach((p,i)=>p.role=Nightfall.ROLES['+size+'][i]);game.phase="discussion";game.players.forEach(p=>game.addSpeech(p.id,"公开完整发言"+(p.id+1)));game.openVoting();busy=true;turnDelay=0;portraitMode=true;flushCommentary=async()=>true;aiSpeeches=async()=>{};profiles.slice(0,'+size+').forEach((p,i)=>Object.assign(p,{control:"api",endpoint:"https://example.test/v1",model:"seat-"+(i+1),key:"private-key-"+(i+1),reasoningEffort:i%2?"high":"xhigh",historyContext:"'+historyContext+'"}));');
   if(extraSpeeches)read('for(let i=0;i<'+extraSpeeches+';i++)game.speechHistory.push({id:i%size,text:"历史发言"+(i+1),round:Math.floor(i/'+size+')+2,pk:i%19===0})');
   for(const id of locals)read('profiles['+id+'].control="local"');
   for(const id of dead)read('game.players['+id+'].alive=false');
@@ -2515,7 +2530,7 @@ function votingHarness(t,{size=6,pk=false,locals=[],dead=[],ignoreAbort=false,ex
 }
 
 
-function wolfHarness(t,{size=12,extraSpeeches=130,extraEvents=22}={}){
+function wolfHarness(t,{size=12,extraSpeeches=130,extraEvents=22,historyContext='full'}={}){
   const {context}=setup(new Map(),false,true,false,true),groups=[];
   const read=code=>vm.runInContext(code,context);
   read([
@@ -2523,7 +2538,7 @@ function wolfHarness(t,{size=12,extraSpeeches=130,extraEvents=22}={}){
     'game.phase="night";game.round=4;',
     'game.speechHistory=Array.from({length:'+extraSpeeches+'},(_,i)=>({id:i%size,text:"夜间公开发言"+(i+1),round:Math.floor(i/'+size+')+1,pk:i%29===0}));',
     'game.logs=Array.from({length:'+extraEvents+'},(_,i)=>({text:"公开事件"+(i+1),round:Math.floor(i/'+size+')+1,phase:i%2?"voting":"discussion"}));',
-    'busy=true;paused=false;portraitMode=true;flushCommentary=async()=>true;',
+    'profiles.forEach(profile=>profile.historyContext="'+historyContext+'");busy=true;paused=false;portraitMode=true;flushCommentary=async()=>true;',
     'profiles.forEach(p=>Object.assign(p,{control:"local"}));',
     'game.players.filter(p=>p.role==="狼人").forEach(p=>Object.assign(profiles[p.id],{control:"api",endpoint:"https://example.test/v1",model:"wolf-seat-"+(p.id+1),key:"wolf-private-key-"+(p.id+1),reasoningEffort:p.id%2?"high":"xhigh"}));'
   ].join(''));
@@ -2568,7 +2583,7 @@ test('狼人批次状态按当前席位显示，后续狼人不会复用第一�
 });
 
 test('超过120条的本局公开发言全部进入并发投票请求',async t=>{
-  const h=votingHarness(t,{size:6,extraSpeeches:125}),{groups}=h;
+  const h=votingHarness(t,{size:6,extraSpeeches:125,historyContext:'full'}),{groups}=h;
   const running=h.start();await until(()=>groups.length===1);
   for(const request of groups[0].requests){
     const context=JSON.parse(request.messages[1].content).context;
@@ -2969,4 +2984,10 @@ test('非法头像回退为默认头像，图片地址插入页面前转义',()=
   assert.equal(vm.runInContext(`buildProfiles([${JSON.stringify({avatar:png})}])[0].avatar`,context),png);
   assert.match(vm.runInContext(`avatarHTML({name:'<b>',avatar:${JSON.stringify(png)}})`,context),/^<img src="data:image\/png;base64,iVBORw0KGgo=" alt="&lt;b&gt;/);
   assert.equal(vm.runInContext(`avatarHTML({name:'n',avatar:'x" onerror="alert(1)'})`,context).includes('<img'),false);
+});
+
+test('等待面板显示当前请求的预计输入 token 数',()=>{
+  const {context}=setup();
+  vm.runInContext("apiWaiting={id:8,requestId:'estimate-test',startedAt:Date.now(),inputTokens:123};renderAction()",context);
+  assert.match(vm.runInContext("$('actionPanel').innerHTML",context),/预计输入约 123 tokens/);
 });

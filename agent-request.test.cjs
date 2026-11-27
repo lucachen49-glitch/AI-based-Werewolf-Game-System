@@ -36,7 +36,7 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
         {role:'assistant',content:[{type:'input_text',text:'previous answer'}]},
         {role:'user',content:[{type:'input_text',text:'next'}]}
       ],
-      reasoning:{effort:effort||'xhigh'},max_output_tokens:350,stream:false,store:false
+      reasoning:{effort:effort||Agent.DEFAULT_REASONING_EFFORT},max_output_tokens:350,stream:false,store:false
     });
   }
   const connection=Agent.responsesBody({model:'model',messages:[{role:'user',content:'Reply with OK.'}],reasoning_effort:null,max_tokens:350});
@@ -45,6 +45,13 @@ test('Responses 统一预算和推理强度，保持角色、文本、图片顺�
   assert.equal(Limits.AGENT_OUTPUT_MAX_TOKENS,Agent.OUTPUT_MAX_TOKENS);
   assert.equal(Limits.SPEECH_CHAR_LIMIT,1400);
   assert.throws(()=>Agent.responsesBody({model:'x',messages:[{role:'user',content:[{type:'unknown'}]}]}),/不支持/);
+});
+
+test('默认推理强度为 high，输入 token 估算区分中日韩与其他字符',()=>{
+  assert.equal(Agent.DEFAULT_REASONING_EFFORT,'high');
+  assert.equal(Agent.estimateInputTokens('狼人'),2);
+  assert.equal(Agent.estimateInputTokens('abcdefghi'),3);
+  assert.equal(Agent.estimateInputTokens({text:'狼人'}),Agent.estimateInputTokens('{"text":"狼人"}'));
 });
 
 test('Responses 只读取助手最终文字，兼容多个输出项并保留本地结构',()=>{
