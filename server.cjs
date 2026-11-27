@@ -438,6 +438,7 @@ async function executeChat(body, options, controller, onRequest = () => {}) {
     gameAction = body?.purpose === 'game-action';
   let timer,
     timedOut = false,
+    requestTimeoutMs = 0,
     diagnostic = null,
     httpStatus,
     responseData,
@@ -489,7 +490,7 @@ async function executeChat(body, options, controller, onRequest = () => {}) {
         'GAME_REQUESTS_ACTIVE',
         '当前仍有游戏 Agent 请求正在处理，请等待本局请求完成后再测试连接',
       );
-    const requestTimeoutMs = gameAction
+    requestTimeoutMs = gameAction
       ? options.gameRequestTimeoutMs
       : Math.min(options.upstreamTimeoutMs, options.connectionTimeoutMs);
     if (requestTimeoutMs > 0)
@@ -578,7 +579,7 @@ async function executeChat(body, options, controller, onRequest = () => {}) {
       ? new ApiError(
           504,
           'UPSTREAM_TIMEOUT',
-          `接口等待超过 ${Math.ceil((gameAction ? options.gameRequestTimeoutMs : options.connectionTimeoutMs) / 1000)} 秒，请稍后重试`,
+          `接口等待超过 ${Math.ceil(requestTimeoutMs / 1000)} 秒，请稍后重试`,
         )
       : controller.signal.aborted
         ? new ApiError(499, 'REQUEST_CANCELLED', '请求已取消')

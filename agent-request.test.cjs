@@ -103,6 +103,8 @@ test('默认推理强度为 medium，输入 token 估算区分中日韩与其他
   assert.equal(Agent.DEFAULT_REASONING_EFFORT, 'medium');
   assert.equal(Agent.normalizeReasoningEffort(undefined), 'medium');
   assert.equal(Agent.normalizeReasoningEffort('invalid'), 'medium');
+  assert.equal(Limits.AGENT_CONNECTION_TIMEOUT_MS, 60000);
+  assert.ok(Limits.AGENT_CONNECTION_TIMEOUT_MS < Limits.AGENT_BROWSER_TIMEOUT_MS);
   assert.equal(Agent.estimateInputTokens('狼人'), 2);
   assert.equal(Agent.estimateInputTokens('abcdefghi'), 3);
   assert.equal(

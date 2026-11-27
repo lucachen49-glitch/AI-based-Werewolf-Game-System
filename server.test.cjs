@@ -732,7 +732,8 @@ test('对局请求使用独立通道，慢响应头和慢响应体超过测试�
 
 test('旧页面与连接测试保持有限等待，对局可在相同接口继续等待', async (t) => {
   const { post } = await fixture(t, {
-    upstreamTimeoutMs: 30,
+    upstreamTimeoutMs: 1000,
+    connectionTimeoutMs: 30,
     agentLogger: () => {},
     handler(req, res) {
       setTimeout(() => {
@@ -743,7 +744,9 @@ test('旧页面与连接测试保持有限等待，对局可在相同接口继�
   for (const body of [{}, { purpose: 'connection-test' }]) {
     const response = await post(body);
     assert.equal(response.status, 504);
-    assert.equal((await response.json()).error.code, 'UPSTREAM_TIMEOUT');
+    const error = await response.json();
+    assert.equal(error.error.code, 'UPSTREAM_TIMEOUT');
+    assert.equal(error.error.message, '接口等待超过 1 秒，请稍后重试');
   }
   assert.equal((await post({ purpose: 'game-action' })).status, 200);
 });

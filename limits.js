@@ -14,7 +14,7 @@
   const SPEECH_BROWSER_TIMEOUT_MS = 280000;
   const SPEECH_READING_MAX_MS = 280000;
   const AGENT_UPSTREAM_TIMEOUT_MS = 180000;
-  const AGENT_CONNECTION_TIMEOUT_MS = 20000;
+  const AGENT_CONNECTION_TIMEOUT_MS = 60000;
   const AGENT_BROWSER_TIMEOUT_MS = 185000;
   function unicodeLength(value) {
     return Array.from(String(value ?? '')).length;
