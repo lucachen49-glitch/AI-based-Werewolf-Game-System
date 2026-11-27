@@ -1,38 +1,73 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#17130f">
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="image-settings.css">
-  <title>图片素材设置 · 夜幕之下</title>
-  <script src="image-settings.js" defer></script>
-</head>
-<body>
-  <main>
-    <a class="back" href="/">← 返回游戏</a>
-    <article>
-      <div class="eyebrow">夜幕之下 · 庄园素材工坊</div>
-      <div class="title-row"><h1>图片素材设置</h1><span class="pill">本机专用</span></div>
-      <p class="intro">为庄园场景和六位人物准备图片接口。保存后，可在这台电脑继续制作素材。</p>
-      <div class="provider-grid">
-        <div><span>图片供应商</span><strong>华龙</strong><small id="imageProvider">https://api-fast.hualong-ai.com</small></div>
-        <div><span>图片模型</span><strong id="imageModel">gpt-image-2.5-sunburst</strong><small>独立于玩家的聊天模型</small></div>
-      </div>
-      <section class="saved" aria-labelledby="savedTitle">
-        <span class="status-dot" id="statusDot"></span>
-        <div><h2 id="savedTitle">正在读取配置…</h2><p id="savedDetail">请稍候</p></div>
-      </section>
-      <form id="settingsForm" autocomplete="off">
-        <label for="imageKey">图片接口密钥</label>
-        <div class="key-field"><input id="imageKey" name="imageKey" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false" maxlength="8192" placeholder="在此填写华龙图片接口 API Key" required aria-describedby="storageNote"><button type="button" id="toggleKey" aria-label="显示密钥" aria-pressed="false">显示</button></div>
-        <p class="note" id="storageNote">密钥使用 Windows 账户加密，保存在这台电脑。刷新页面或重启服务后仍可使用；不会回填到输入框，也不会写入玩家配置。</p>
-        <button type="submit" class="save-button" id="saveButton" disabled>加密保存到本机</button>
-        <p class="result" id="result" role="status" aria-live="polite"></p>
-      </form>
-      <footer><span>仅用于制作素材</span><p>保存不会发起图片生成或产生调用费用。接口权限和实际出图将在制作时验证；游戏启动、发牌和发言均不调用图片接口。</p></footer>
-    </article>
-  </main>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#17130f" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="image-settings.css" />
+    <title>图片素材设置 · 夜幕之下</title>
+    <script src="image-settings.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <a class="back" href="/">← 返回游戏</a>
+      <article>
+        <div class="eyebrow">夜幕之下 · 庄园素材工坊</div>
+        <div class="title-row">
+          <h1>图片素材设置</h1>
+          <span class="pill">本机专用</span>
+        </div>
+        <p class="intro">为庄园场景和六位人物准备图片接口。保存后，可在这台电脑继续制作素材。</p>
+        <div class="provider-grid">
+          <div>
+            <span>图片供应商</span><strong>华龙</strong
+            ><small id="imageProvider">https://api-fast.hualong-ai.com</small>
+          </div>
+          <div>
+            <span>图片模型</span><strong id="imageModel">gpt-image-2.5-sunburst</strong
+            ><small>独立于玩家的聊天模型</small>
+          </div>
+        </div>
+        <section class="saved" aria-labelledby="savedTitle">
+          <span class="status-dot" id="statusDot"></span>
+          <div>
+            <h2 id="savedTitle">正在读取配置…</h2>
+            <p id="savedDetail">请稍候</p>
+          </div>
+        </section>
+        <form id="settingsForm" autocomplete="off">
+          <label for="imageKey">图片接口密钥</label>
+          <div class="key-field">
+            <input
+              id="imageKey"
+              name="imageKey"
+              type="password"
+              autocomplete="new-password"
+              autocapitalize="off"
+              spellcheck="false"
+              maxlength="8192"
+              placeholder="在此填写华龙图片接口 API Key"
+              required
+              aria-describedby="storageNote"
+            /><button type="button" id="toggleKey" aria-label="显示密钥" aria-pressed="false">
+              显示
+            </button>
+          </div>
+          <p class="note" id="storageNote">
+            密钥使用 Windows
+            账户加密，保存在这台电脑。刷新页面或重启服务后仍可使用；不会回填到输入框，也不会写入玩家配置。
+          </p>
+          <button type="submit" class="save-button" id="saveButton" disabled>加密保存到本机</button>
+          <p class="result" id="result" role="status" aria-live="polite"></p>
+        </form>
+        <footer>
+          <span>仅用于制作素材</span>
+          <p>
+            保存不会发起图片生成或产生调用费用。接口权限和实际出图将在制作时验证；游戏启动、发牌和发言均不调用图片接口。
+          </p>
+        </footer>
+      </article>
+    </main>
+  </body>
 </html>

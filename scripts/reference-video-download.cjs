@@ -1,3 +1,36 @@
-const fs=require('node:fs/promises'),path=require('node:path');
-const {createVideoConfigStore}=require('../video-config.cjs');
-(async()=>{const dir=path.join(process.cwd(),'output','reference-video-test-20261121'),file=path.join(dir,'status.json'),state=JSON.parse(await fs.readFile(file));const cred=await createVideoConfigStore().loadCredential();const endpoint=cred.provider+'/videos/'+encodeURIComponent(state.requestId);const query=await fetch(endpoint,{headers:{Authorization:'Bearer '+cred.apiKey},signal:AbortSignal.timeout(30000)});const body=await query.json();if(body.status!=='done'||!body.video?.url)throw Error('任务尚未完成或缺少下载地址');const url=new URL(body.video.url,cred.provider+'/');const same=url.origin===new URL(cred.provider).origin&&url.pathname==='/v1/videos/'+encodeURIComponent(state.requestId)+'/content';const res=await fetch(url,{headers:same?{Authorization:'Bearer '+cred.apiKey}:{},redirect:'error',signal:AbortSignal.timeout(120000)});if(!res.ok)throw Error('下载失败 HTTP '+res.status);const b=Buffer.from(await res.arrayBuffer());if(b.length<32)throw Error('视频内容过小');await fs.writeFile(path.join(dir,'scene-1.mp4'),b);state.status='done';state.bytes=b.length;await fs.writeFile(file,JSON.stringify(state,null,2));console.log(JSON.stringify(state))})().catch(e=>{console.error(e.message);process.exitCode=1});
+const fs = require('node:fs/promises'),
+  path = require('node:path');
+const { createVideoConfigStore } = require('../video-config.cjs');
+(async () => {
+  const dir = path.join(process.cwd(), 'output', 'reference-video-test-20261121'),
+    file = path.join(dir, 'status.json'),
+    state = JSON.parse(await fs.readFile(file));
+  const cred = await createVideoConfigStore().loadCredential();
+  const endpoint = cred.provider + '/videos/' + encodeURIComponent(state.requestId);
+  const query = await fetch(endpoint, {
+    headers: { Authorization: 'Bearer ' + cred.apiKey },
+    signal: AbortSignal.timeout(30000),
+  });
+  const body = await query.json();
+  if (body.status !== 'done' || !body.video?.url) throw Error('任务尚未完成或缺少下载地址');
+  const url = new URL(body.video.url, cred.provider + '/');
+  const same =
+    url.origin === new URL(cred.provider).origin &&
+    url.pathname === '/v1/videos/' + encodeURIComponent(state.requestId) + '/content';
+  const res = await fetch(url, {
+    headers: same ? { Authorization: 'Bearer ' + cred.apiKey } : {},
+    redirect: 'error',
+    signal: AbortSignal.timeout(120000),
+  });
+  if (!res.ok) throw Error('下载失败 HTTP ' + res.status);
+  const b = Buffer.from(await res.arrayBuffer());
+  if (b.length < 32) throw Error('视频内容过小');
+  await fs.writeFile(path.join(dir, 'scene-1.mp4'), b);
+  state.status = 'done';
+  state.bytes = b.length;
+  await fs.writeFile(file, JSON.stringify(state, null, 2));
+  console.log(JSON.stringify(state));
+})().catch((e) => {
+  console.error(e.message);
+  process.exitCode = 1;
+});

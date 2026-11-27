@@ -1,19 +1,26 @@
 <!doctype html>
 <html lang="zh-CN">
   <head>
-  <link rel="icon" href="data:,">
+    <link rel="icon" href="data:," />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#17110f" />
     <title>夜幕之下 · AI 狼人杀</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="manor.css" />
     <link rel="stylesheet" href="theme.css" />
     <link rel="stylesheet" href="story.css" />
-  <link rel="stylesheet" href="manor-twelve.css"><link rel="stylesheet" href="fullscreen.css"><link rel="stylesheet" href="portrait.css"><link rel="stylesheet" href="recording.css"></head>
+    <link rel="stylesheet" href="manor-twelve.css" />
+    <link rel="stylesheet" href="fullscreen.css" />
+    <link rel="stylesheet" href="portrait.css" />
+    <link rel="stylesheet" href="recording.css" />
+  </head>
   <body>
     <div class="ambient ambient-a"></div>
     <div class="ambient ambient-b"></div>
@@ -29,8 +36,12 @@
 
         <div class="sidebar-label">房间模式</div>
         <div class="room-switch" role="tablist" aria-label="房间人数">
-          <button class="room-option active" data-room="6" role="tab">6 人间 <small>新手局</small></button>
-          <button class="room-option" data-room="12" role="tab">12 人间 <small>进阶局</small></button>
+          <button class="room-option active" data-room="6" role="tab">
+            6 人间 <small>新手局</small>
+          </button>
+          <button class="room-option" data-room="12" role="tab">
+            12 人间 <small>进阶局</small>
+          </button>
         </div>
 
         <div class="side-rule-card">
@@ -44,8 +55,22 @@
           <button class="nav-item active" data-view="table"><span>◈</span>游戏桌</button>
           <button class="nav-item" data-view="agents"><span>⌁</span>Agent 配置</button>
           <button class="nav-item" data-view="rules"><span>▤</span>规则手册</button>
-          <a class="nav-item" href="/image-settings.html" target="_blank" rel="noopener" style="text-decoration:none"><span>✦</span>图片素材设置</a>
-          <a class="nav-item" href="/scenario-settings.html" target="_blank" rel="noopener" style="text-decoration:none"><span>▤</span>剧本工坊</a>
+          <a
+            class="nav-item"
+            href="/image-settings.html"
+            target="_blank"
+            rel="noopener"
+            style="text-decoration: none"
+            ><span>✦</span>图片素材设置</a
+          >
+          <a
+            class="nav-item"
+            href="/scenario-settings.html"
+            target="_blank"
+            rel="noopener"
+            style="text-decoration: none"
+            ><span>▤</span>剧本工坊</a
+          >
         </nav>
 
         <div class="sidebar-bottom">
@@ -56,10 +81,15 @@
 
       <section class="workspace">
         <header class="topbar">
-          <div class="crumb"><span class="live-dot"></span><span>私人房间</span><b>/</b><span class="muted">暮色港湾 #0824</span></div>
+          <div class="crumb">
+            <span class="live-dot"></span><span>私人房间</span><b>/</b
+            ><span class="muted">暮色港湾 #0824</span>
+          </div>
           <div class="top-actions">
             <button class="icon-btn" id="soundBtn" title="声音开关">◒</button>
-            <button class="profile-chip" id="profileBtn" title="配置 1 号席位"><span class="mini-avatar">🦊</span><span>岚</span><span class="chevron">⌄</span></button>
+            <button class="profile-chip" id="profileBtn" title="配置 1 号席位">
+              <span class="mini-avatar">🦊</span><span>岚</span><span class="chevron">⌄</span>
+            </button>
           </div>
         </header>
 
@@ -72,102 +102,654 @@
             </div>
             <div class="heading-actions">
               <button class="secondary-btn watch-control" id="ruleIntroBtn">▷ 规则介绍</button>
-              <button class="secondary-btn watch-control" id="fullscreenBtn" aria-pressed="false">⛶ 全屏观战</button>
-              <button class="secondary-btn" id="portraitBtn" aria-pressed="false">▯ 竖屏录制</button>
+              <button class="secondary-btn watch-control" id="fullscreenBtn" aria-pressed="false">
+                ⛶ 全屏观战
+              </button>
+              <button class="secondary-btn" id="portraitBtn" aria-pressed="false">
+                ▯ 竖屏录制
+              </button>
               <button class="secondary-btn portrait-only" id="portraitResetBtn">↺ 重置对局</button>
               <button class="secondary-btn" id="copyRoomBtn">⌘ 复制房间号</button>
-              <button class="secondary-btn pause-btn" id="pauseBtn" disabled aria-pressed="false">Ⅱ 暂停</button>
-              <label class="recording-toggle"><input type="checkbox" id="autoRecord"> 自动录屏</label><span id="recordingSupport" class="recording-support"></span><button class="primary-btn" id="startBtn"><span class="play-icon">▶</span><span id="startText">开始游戏</span></button>
+              <button class="secondary-btn pause-btn" id="pauseBtn" disabled aria-pressed="false">
+                Ⅱ 暂停
+              </button>
+              <label class="recording-toggle"
+                ><input type="checkbox" id="autoRecord" /> 自动录屏</label
+              ><span id="recordingSupport" class="recording-support"></span
+              ><button class="primary-btn" id="startBtn">
+                <span class="play-icon">▶</span><span id="startText">开始游戏</span>
+              </button>
             </div>
           </div>
 
-          <div class="recording-links"><details class="recording-panel"><summary id="recordingStatus" role="status">录屏准备就绪 · 查看本地录像</summary><div id="recordingList"></div><div class="recording-item recording-agent-log"><span>本局 Agent 日志</span><button type="button" id="downloadGameLogBtn">下载</button></div></details><a id="latestRecordingPlayback" class="latest-recording-playback" target="_blank" rel="noopener" hidden>▶ 打开最新回放</a></div>
-          <div class="story-bar" id="storyBar"><span class="story-label" id="storyRoomLabel">6 人序幕</span><label>剧本<select id="storyChoice" aria-label="6 人剧本"><option value="">标准狼人杀</option></select></label><button id="storyRefresh" title="刷新本机剧本">↻ 刷新</button><p id="storyHint">标准玩法，不播放剧情开场。</p><a href="/scenario-settings.html" target="_blank" rel="noopener">打开剧本工坊 ↗</a></div>
+          <div class="recording-links">
+            <details class="recording-panel">
+              <summary id="recordingStatus" role="status">录屏准备就绪 · 查看本地录像</summary>
+              <div id="recordingList"></div>
+              <div class="recording-item recording-agent-log">
+                <span>本局 Agent 日志</span
+                ><button type="button" id="downloadGameLogBtn">下载</button>
+              </div>
+            </details>
+            <a
+              id="latestRecordingPlayback"
+              class="latest-recording-playback"
+              target="_blank"
+              rel="noopener"
+              hidden
+              >▶ 打开最新回放</a
+            >
+          </div>
+          <div class="story-bar" id="storyBar">
+            <span class="story-label" id="storyRoomLabel">6 人序幕</span
+            ><label
+              >剧本<select id="storyChoice" aria-label="6 人剧本">
+                <option value="">标准狼人杀</option>
+              </select></label
+            ><button id="storyRefresh" title="刷新本机剧本">↻ 刷新</button>
+            <p id="storyHint">标准玩法，不播放剧情开场。</p>
+            <a href="/scenario-settings.html" target="_blank" rel="noopener">打开剧本工坊 ↗</a>
+          </div>
           <div class="status-strip">
-            <div class="phase-card night" id="phaseCard"><span class="phase-icon">☾</span><div><span class="label">当前阶段</span><strong id="phaseName">夜晚 · 狼人行动</strong></div></div>
-            <div class="status-metric"><span class="label">回合</span><strong id="roundValue">01 <small>/ 08</small></strong></div>
-            <div class="status-metric"><span class="label">存活玩家</span><strong id="aliveValue">06 <small>人</small></strong></div>
-            <div class="status-metric"><span class="label">AI 在线</span><strong class="teal" id="aiValue">04 <small>/ 06</small></strong></div>
-            <div class="stage-progress"><div class="progress-head"><span>本局进度</span><b id="progressText">12%</b></div><div class="progress-track"><i id="progressBar"></i></div></div>
+            <div class="phase-card night" id="phaseCard">
+              <span class="phase-icon">☾</span>
+              <div>
+                <span class="label">当前阶段</span><strong id="phaseName">夜晚 · 狼人行动</strong>
+              </div>
+            </div>
+            <div class="status-metric">
+              <span class="label">回合</span><strong id="roundValue">01 <small>/ 08</small></strong>
+            </div>
+            <div class="status-metric">
+              <span class="label">存活玩家</span
+              ><strong id="aliveValue">06 <small>人</small></strong>
+            </div>
+            <div class="status-metric">
+              <span class="label">AI 在线</span
+              ><strong class="teal" id="aiValue">04 <small>/ 06</small></strong>
+            </div>
+            <div class="stage-progress">
+              <div class="progress-head"><span>本局进度</span><b id="progressText">12%</b></div>
+              <div class="progress-track"><i id="progressBar"></i></div>
+            </div>
           </div>
 
           <section class="action-panel panel" id="actionPanel" aria-live="polite"></section>
           <section class="portrait-api-bar" id="portraitAPIBar" aria-label="接口连接状态">
             <span id="portraitAPIStatus" role="status" aria-live="polite">接口等待：无</span>
-            <button type="button" data-command="stop-api" id="portraitAPIStop" hidden>停止等待</button>
-            <button type="button" data-command="retry-api" id="portraitAPIRetry" hidden>重试当前行动</button>
+            <button type="button" data-command="stop-api" id="portraitAPIStop" hidden>
+              停止等待
+            </button>
+            <button type="button" data-command="retry-api" id="portraitAPIRetry" hidden>
+              重试当前行动
+            </button>
             <button type="button" data-command="edit-api" id="portraitAPIEdit">修改配置</button>
             <button type="button" id="portraitAPIDetails" aria-haspopup="dialog">详情</button>
           </section>
-          <dialog class="portrait-api-dialog" id="portraitAPIDialog" aria-labelledby="portraitAPIDialogTitle" aria-describedby="portraitAPIDialogText">
-            <h2 id="portraitAPIDialogTitle">接口连接等待</h2><p id="portraitAPIDialogText"></p>
+          <dialog
+            class="portrait-api-dialog"
+            id="portraitAPIDialog"
+            aria-labelledby="portraitAPIDialogTitle"
+            aria-describedby="portraitAPIDialogText"
+          >
+            <h2 id="portraitAPIDialogTitle">接口连接等待</h2>
+            <p id="portraitAPIDialogText"></p>
             <form method="dialog"><button type="submit" class="secondary-btn">关闭</button></form>
           </dialog>
 
-          <div class="spectator-toolbar"><label>观战视角<select id="perspectiveInput" aria-label="观战视角"><option value="god">上帝视角</option><option value="public">普通观战</option></select></label><span id="perspectiveLabel"></span><button class="round-btn" id="narratorBtn" aria-pressed="false">♫ 旁白：关</button><button class="round-btn" id="effectsBtn" aria-pressed="true">♪ 音效：开</button><label class="effects-volume">音量<input id="effectsVolume" type="range" min="0" max="100" value="30" aria-label="音效音量"><output id="effectsVolumeLabel">30%</output></label><button class="round-btn" id="musicBtn" aria-pressed="true" title="对局开始后播放背景音乐">♫ 音乐：开</button><label class="effects-volume music-volume">音量<input id="musicVolume" type="range" min="0" max="100" value="15" aria-label="背景音乐音量"><output id="musicVolumeLabel">15%</output></label><button class="secondary-btn" id="railToggle" aria-expanded="true" aria-controls="observerRail spectatorRail">收起记录</button></div>
+          <div class="spectator-toolbar">
+            <label
+              >观战视角<select id="perspectiveInput" aria-label="观战视角">
+                <option value="god">上帝视角</option>
+                <option value="public">普通观战</option>
+              </select></label
+            ><span id="perspectiveLabel"></span
+            ><button class="round-btn" id="narratorBtn" aria-pressed="false">♫ 旁白：关</button
+            ><button class="round-btn" id="effectsBtn" aria-pressed="true">♪ 音效：开</button
+            ><label class="effects-volume"
+              >音量<input
+                id="effectsVolume"
+                type="range"
+                min="0"
+                max="100"
+                value="30"
+                aria-label="音效音量"
+              /><output id="effectsVolumeLabel">30%</output></label
+            ><button
+              class="round-btn"
+              id="musicBtn"
+              aria-pressed="true"
+              title="对局开始后播放背景音乐"
+            >
+              ♫ 音乐：开</button
+            ><label class="effects-volume music-volume"
+              >音量<input
+                id="musicVolume"
+                type="range"
+                min="0"
+                max="100"
+                value="15"
+                aria-label="背景音乐音量"
+              /><output id="musicVolumeLabel">15%</output></label
+            ><button
+              class="secondary-btn"
+              id="railToggle"
+              aria-expanded="true"
+              aria-controls="observerRail spectatorRail"
+            >
+              收起记录
+            </button>
+          </div>
           <div class="game-layout">
             <aside id="observerRail" class="observer-rail" aria-label="对局进程与旁白">
-              <section class="observer-panel panel" aria-labelledby="activityTab"><header class="panel-head compact"><div><span class="panel-kicker">THE STORY SO FAR</span><h2 id="activityTab">对局动态</h2></div><span class="unread" id="unreadCount">0</span></header><div class="observer-viewport" id="activityViewport" tabindex="0" aria-label="对局动态记录"><div class="feed-list" id="feedList"></div></div><button class="new-records hidden" id="newActivityBtn">查看新动态</button></section>
-              <section class="observer-panel narrator-panel panel" aria-labelledby="commentaryTab"><header class="panel-head compact"><div><span class="panel-kicker">THE NARRATOR</span><h2 id="commentaryTab">旁白</h2></div><span class="narrator-mark" aria-hidden="true">♫</span></header><div class="commentary-caption" role="status"><span class="caption-label">此刻</span><p id="commentaryText">点击开始，旁白将带你了解对局。</p></div><div class="observer-viewport" id="commentaryViewport" tabindex="0" aria-label="旁白历史"><div id="commentaryList"></div></div><button class="new-records hidden" id="newCommentaryBtn">查看新旁白</button></section>
+              <section class="observer-panel panel" aria-labelledby="activityTab">
+                <header class="panel-head compact">
+                  <div>
+                    <span class="panel-kicker">THE STORY SO FAR</span>
+                    <h2 id="activityTab">对局动态</h2>
+                  </div>
+                  <span class="unread" id="unreadCount">0</span>
+                </header>
+                <div
+                  class="observer-viewport"
+                  id="activityViewport"
+                  tabindex="0"
+                  aria-label="对局动态记录"
+                >
+                  <div class="feed-list" id="feedList"></div>
+                </div>
+                <button class="new-records hidden" id="newActivityBtn">查看新动态</button>
+              </section>
+              <section class="observer-panel narrator-panel panel" aria-labelledby="commentaryTab">
+                <header class="panel-head compact">
+                  <div>
+                    <span class="panel-kicker">THE NARRATOR</span>
+                    <h2 id="commentaryTab">旁白</h2>
+                  </div>
+                  <span class="narrator-mark" aria-hidden="true">♫</span>
+                </header>
+                <div class="commentary-caption" role="status">
+                  <span class="caption-label">此刻</span>
+                  <p id="commentaryText">点击开始，旁白将带你了解对局。</p>
+                </div>
+                <div
+                  class="observer-viewport"
+                  id="commentaryViewport"
+                  tabindex="0"
+                  aria-label="旁白历史"
+                >
+                  <div id="commentaryList"></div>
+                </div>
+                <button class="new-records hidden" id="newCommentaryBtn">查看新旁白</button>
+              </section>
             </aside>
             <section class="table-panel panel">
-              <div class="panel-head"><div><span class="panel-kicker">LIVE TABLE</span><h2>玩家席位</h2></div><div class="table-tools"><span class="seat-count" id="seatCount">6 / 6</span><button class="round-btn" id="voiceBtn" aria-pressed="false">♫ 对白语音：关</button><label class="speed-control">观战节奏<select id="speedInput" aria-label="观战节奏"><option value="300">快速</option><option value="1200" selected>标准</option><option value="2600">慢速</option></select></label></div></div>
-              <p class="voice-status" id="voiceStatus" role="status">对白将按席位顺序朗读</p>
-              <div class="speech-recovery hidden" id="speechRecovery" role="group" aria-label="语音失败操作"><button class="secondary-btn" id="speechRetryBtn">重试本句</button><button class="secondary-btn" id="speechSkipBtn">无声继续</button></div>
-              <div id="portraitMovieTools" class="portrait-movie-tools hidden"></div>
-              <div id="fullscreenCaption" class="fullscreen-caption" role="status"></div><div class="table-stage" id="tableStage"><div id="portraitFrame" class="portrait-frame hidden" role="region" aria-label="9:16 竖屏录制画面"><img class="portrait-backdrop" src="assets/manor/manor-room.webp" alt="" draggable="false"><div class="portrait-vignette"></div><header class="portrait-heading"><span class="portrait-eyebrow">NIGHTFALL · 夜幕之下</span><h2 id="portraitTitle">血月下的长桌</h2><p id="portraitPhase"></p><span id="portraitPerspective"></span></header><div class="portrait-seats portrait-seats-left" id="portraitSeatsLeft"></div><div class="portrait-seats portrait-seats-right" id="portraitSeatsRight"></div><section class="portrait-hero" id="portraitHero"><div class="portrait-hero-art" id="portraitHeroArt"></div><div class="portrait-hero-label"><p id="portraitHeroState"></p><h3 id="portraitHeroName"></h3><div id="portraitHeroRole"></div></div></section><section class="portrait-idle" id="portraitIdle"><div class="portrait-phase-symbol" id="portraitSymbol">☾</div><span class="portrait-eyebrow" id="portraitIdleKicker">暮色庄园</span><h3 id="portraitIdleTitle">等待入座</h3><div id="portraitVoteSummary"></div></section><div class="portrait-subtitles" role="status"><span id="portraitCaptionLabel">序章</span><p id="portraitCaption">点击开始，故事即将展开。</p></div><footer class="portrait-footer"><span id="portraitAlive"></span><span>命运随机 · 真相待揭</span></footer></div><div class="table-viewport" id="tableViewport" tabindex="0" aria-label="圆桌席位，小屏幕可横向滚动"><div class="table-scene" id="tableScene">
-                <div class="table-glow"></div><img class="manor-room-art" src="assets/manor/manor-room.webp" data-manor-asset="room" alt="" draggable="false"><img class="manor-table-art" src="assets/manor/manor-table.webp" data-manor-asset="table" alt="" draggable="false"><div class="table-ring"></div>
-                <div class="table-center"><div class="moon">☾</div><strong>暮色港湾</strong><span id="centerHint">等待狼人选择今晚的目标</span><div class="center-seal"><i></i> 标准规则</div></div>
-                <div class="players-grid" id="playersGrid"></div>
+              <div class="panel-head">
+                <div>
+                  <span class="panel-kicker">LIVE TABLE</span>
+                  <h2>玩家席位</h2>
+                </div>
+                <div class="table-tools">
+                  <span class="seat-count" id="seatCount">6 / 6</span
+                  ><button class="round-btn" id="voiceBtn" aria-pressed="false">
+                    ♫ 对白语音：关</button
+                  ><label class="speed-control"
+                    >观战节奏<select id="speedInput" aria-label="观战节奏">
+                      <option value="300">快速</option>
+                      <option value="1200" selected>标准</option>
+                      <option value="2600">慢速</option>
+                    </select></label
+                  >
+                </div>
               </div>
-              </div><div class="scene-effect hidden" id="sceneEffect" aria-hidden="true"></div><div class="speech-bubble hidden" id="speechBubble" role="status" aria-live="polite"></div></div><p class="table-scroll-hint">顺时针落座 · 小屏幕可左右滑动查看圆桌</p><div class="table-legend"><span><i class="dot teal-dot"></i>AI 席位</span><span><i class="dot gold-dot"></i>当前行动</span><span><i class="dot gray-dot"></i>已出局</span><span class="auto-state" id="autoState">全 AI 托管</span></div>
+              <p class="voice-status" id="voiceStatus" role="status">对白将按席位顺序朗读</p>
+              <div
+                class="speech-recovery hidden"
+                id="speechRecovery"
+                role="group"
+                aria-label="语音失败操作"
+              >
+                <button class="secondary-btn" id="speechRetryBtn">重试本句</button
+                ><button class="secondary-btn" id="speechSkipBtn">无声继续</button>
+              </div>
+              <div id="portraitMovieTools" class="portrait-movie-tools hidden"></div>
+              <div id="fullscreenCaption" class="fullscreen-caption" role="status"></div>
+              <div class="table-stage" id="tableStage">
+                <div
+                  id="portraitFrame"
+                  class="portrait-frame hidden"
+                  role="region"
+                  aria-label="9:16 竖屏录制画面"
+                >
+                  <img
+                    class="portrait-backdrop"
+                    src="assets/manor/manor-room.webp"
+                    alt=""
+                    draggable="false"
+                  />
+                  <div class="portrait-vignette"></div>
+                  <header class="portrait-heading">
+                    <span class="portrait-eyebrow">NIGHTFALL · 夜幕之下</span>
+                    <h2 id="portraitTitle">血月下的长桌</h2>
+                    <p id="portraitPhase"></p>
+                    <span id="portraitPerspective"></span>
+                  </header>
+                  <div class="portrait-seats portrait-seats-left" id="portraitSeatsLeft"></div>
+                  <div class="portrait-seats portrait-seats-right" id="portraitSeatsRight"></div>
+                  <section class="portrait-hero" id="portraitHero">
+                    <div class="portrait-hero-art" id="portraitHeroArt"></div>
+                    <div class="portrait-hero-label">
+                      <p id="portraitHeroState"></p>
+                      <h3 id="portraitHeroName"></h3>
+                      <div id="portraitHeroRole"></div>
+                    </div>
+                  </section>
+                  <section class="portrait-idle" id="portraitIdle">
+                    <div class="portrait-phase-symbol" id="portraitSymbol">☾</div>
+                    <span class="portrait-eyebrow" id="portraitIdleKicker">暮色庄园</span>
+                    <h3 id="portraitIdleTitle">等待入座</h3>
+                    <div id="portraitVoteSummary"></div>
+                  </section>
+                  <div class="portrait-subtitles" role="status">
+                    <span id="portraitCaptionLabel">序章</span>
+                    <p id="portraitCaption">点击开始，故事即将展开。</p>
+                  </div>
+                  <footer class="portrait-footer">
+                    <span id="portraitAlive"></span><span>命运随机 · 真相待揭</span>
+                  </footer>
+                </div>
+                <div
+                  class="table-viewport"
+                  id="tableViewport"
+                  tabindex="0"
+                  aria-label="圆桌席位，小屏幕可横向滚动"
+                >
+                  <div class="table-scene" id="tableScene">
+                    <div class="table-glow"></div>
+                    <img
+                      class="manor-room-art"
+                      src="assets/manor/manor-room.webp"
+                      data-manor-asset="room"
+                      alt=""
+                      draggable="false"
+                    /><img
+                      class="manor-table-art"
+                      src="assets/manor/manor-table.webp"
+                      data-manor-asset="table"
+                      alt=""
+                      draggable="false"
+                    />
+                    <div class="table-ring"></div>
+                    <div class="table-center">
+                      <div class="moon">☾</div>
+                      <strong>暮色港湾</strong><span id="centerHint">等待狼人选择今晚的目标</span>
+                      <div class="center-seal"><i></i> 标准规则</div>
+                    </div>
+                    <div class="players-grid" id="playersGrid"></div>
+                  </div>
+                </div>
+                <div class="scene-effect hidden" id="sceneEffect" aria-hidden="true"></div>
+                <div
+                  class="speech-bubble hidden"
+                  id="speechBubble"
+                  role="status"
+                  aria-live="polite"
+                ></div>
+              </div>
+              <p class="table-scroll-hint">顺时针落座 · 小屏幕可左右滑动查看圆桌</p>
+              <div class="table-legend">
+                <span><i class="dot teal-dot"></i>AI 席位</span
+                ><span><i class="dot gold-dot"></i>当前行动</span
+                ><span><i class="dot gray-dot"></i>已出局</span
+                ><span class="auto-state" id="autoState">全 AI 托管</span>
+              </div>
             </section>
 
             <aside class="spectator-rail panel" id="spectatorRail" aria-label="观战记录">
-              <div class="panel-head compact"><div><span class="panel-kicker">VOICES AT THE TABLE</span><h2 id="speechTab">发言记录</h2></div><div class="rail-head-actions"><button class="rail-close" id="railClose" aria-label="收起观战记录">×</button></div></div>
-              <div class="speech-filters" id="speechFilters"><label>玩家<select id="recordSeat" aria-label="筛选玩家发言"><option value="all">全部玩家</option></select></label><span id="speechState">公开发言</span></div>
-              <div class="records-viewport" id="recordsViewport" role="region" aria-labelledby="speechTab" tabindex="0"><div id="transcript"></div></div><button id="newRecordsBtn" class="new-records hidden">回到最新记录</button>
+              <div class="panel-head compact">
+                <div>
+                  <span class="panel-kicker">VOICES AT THE TABLE</span>
+                  <h2 id="speechTab">发言记录</h2>
+                </div>
+                <div class="rail-head-actions">
+                  <button class="rail-close" id="railClose" aria-label="收起观战记录">×</button>
+                </div>
+              </div>
+              <div class="speech-filters" id="speechFilters">
+                <label
+                  >玩家<select id="recordSeat" aria-label="筛选玩家发言">
+                    <option value="all">全部玩家</option>
+                  </select></label
+                ><span id="speechState">公开发言</span>
+              </div>
+              <div
+                class="records-viewport"
+                id="recordsViewport"
+                role="region"
+                aria-labelledby="speechTab"
+                tabindex="0"
+              >
+                <div id="transcript"></div>
+              </div>
+              <button id="newRecordsBtn" class="new-records hidden">回到最新记录</button>
             </aside>
           </div>
 
           <section class="bottom-grid">
-            <div class="panel tip-panel"><div class="tip-icon">✧</div><div><span class="panel-kicker">小提示</span><p id="tipText">狼人阵营需要在白天隐藏身份，并通过投票淘汰好人。</p></div><button class="close-tip" id="closeTip">×</button></div>
+            <div class="panel tip-panel">
+              <div class="tip-icon">✧</div>
+              <div>
+                <span class="panel-kicker">小提示</span>
+                <p id="tipText">狼人阵营需要在白天隐藏身份，并通过投票淘汰好人。</p>
+              </div>
+              <button class="close-tip" id="closeTip">×</button>
+            </div>
           </section>
         </div>
 
         <div class="content hidden" id="agentsView">
-          <div class="page-heading compact-heading"><div><div class="kicker">PLAYER LAB · 可替换人格</div><h1>为每个席位，<em>装上一个灵魂。</em></h1><p>每个席位独立绑定模型、人格和形象，角色由系统开局随机分配；可将勾选记住的密钥加密保存在本机游戏服务中，清理浏览器缓存后也能恢复。</p></div><button class="primary-btn" id="saveAllAgents">保存全部配置</button></div>
-          <div class="agent-toolbar panel"><div><b id="agentCount">6 个席位</b><span> · API 配置 <strong id="configuredCount">0</strong> 个 · 其余使用本地模拟</span></div><button class="secondary-btn" id="testAllBtn">▷ 批量测试连接</button></div>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="kicker">PLAYER LAB · 可替换人格</div>
+              <h1>为每个席位，<em>装上一个灵魂。</em></h1>
+              <p>
+                每个席位独立绑定模型、人格和形象，角色由系统开局随机分配；可将勾选记住的密钥加密保存在本机游戏服务中，清理浏览器缓存后也能恢复。
+              </p>
+            </div>
+            <button class="primary-btn" id="saveAllAgents">保存全部配置</button>
+          </div>
+          <div class="agent-toolbar panel">
+            <div>
+              <b id="agentCount">6 个席位</b
+              ><span>
+                · API 配置 <strong id="configuredCount">0</strong> 个 · 其余使用本地模拟</span
+              >
+            </div>
+            <button class="secondary-btn" id="testAllBtn">▷ 批量测试连接</button>
+          </div>
           <div class="agent-grid" id="agentGrid"></div>
         </div>
 
         <div class="content hidden" id="rulesView">
-          <div class="page-heading compact-heading"><div><div class="kicker">RULEBOOK · 内置规则</div><h1>一张桌子，<em>两套胜利条件。</em></h1><p>规则会跟随人数自动切换，AI 也会读取相同的状态机。</p></div><div class="rule-toggle"><button class="rule-mode active" data-rule="6">6 人板子</button><button class="rule-mode" data-rule="12">12 人板子</button></div></div>
-          <div class="rules-layout"><div class="rule-main panel"><div class="panel-head compact"><div><span class="panel-kicker">RULES IN BRIEF</span><h2 id="ruleTitle">经典 6 人局</h2></div><button class="round-btn" id="readRulesBtn">▷ 语音介绍规则</button></div><div class="rule-sections" id="ruleSections"></div></div><div class="win-card panel"><span class="panel-kicker">WIN CONDITION</span><h2>谁先达成目标？</h2><div class="win-side good"><span>☀</span><div><b>好人阵营</b><p>狼人全部出局</p></div></div><div class="win-side wolf"><span>☾</span><div><b>狼人阵营</b><p>神职或平民任一阵营全部出局</p></div></div><div class="rule-foot">两种胜利条件同时满足时，好人获胜。平票时进入 PK 发言；再次平票则本轮无人出局。</div></div></div>
+          <div class="page-heading compact-heading">
+            <div>
+              <div class="kicker">RULEBOOK · 内置规则</div>
+              <h1>一张桌子，<em>两套胜利条件。</em></h1>
+              <p>规则会跟随人数自动切换，AI 也会读取相同的状态机。</p>
+            </div>
+            <div class="rule-toggle">
+              <button class="rule-mode active" data-rule="6">6 人板子</button
+              ><button class="rule-mode" data-rule="12">12 人板子</button>
+            </div>
+          </div>
+          <div class="rules-layout">
+            <div class="rule-main panel">
+              <div class="panel-head compact">
+                <div>
+                  <span class="panel-kicker">RULES IN BRIEF</span>
+                  <h2 id="ruleTitle">经典 6 人局</h2>
+                </div>
+                <button class="round-btn" id="readRulesBtn">▷ 语音介绍规则</button>
+              </div>
+              <div class="rule-sections" id="ruleSections"></div>
+            </div>
+            <div class="win-card panel">
+              <span class="panel-kicker">WIN CONDITION</span>
+              <h2>谁先达成目标？</h2>
+              <div class="win-side good">
+                <span>☀</span>
+                <div>
+                  <b>好人阵营</b>
+                  <p>狼人全部出局</p>
+                </div>
+              </div>
+              <div class="win-side wolf">
+                <span>☾</span>
+                <div>
+                  <b>狼人阵营</b>
+                  <p>神职或平民任一阵营全部出局</p>
+                </div>
+              </div>
+              <div class="rule-foot">两种胜利条件同时满足时，好人获胜。平票时进入 PK 发言；再次平票则本轮无人出局。</div>
+            </div>
+          </div>
         </div>
       </section>
     </main>
 
-    <button class="mobile-record-toggle" id="mobileRecordToggle" aria-controls="observerRail spectatorRail" aria-expanded="true">观战记录</button>
+    <button
+      class="mobile-record-toggle"
+      id="mobileRecordToggle"
+      aria-controls="observerRail spectatorRail"
+      aria-expanded="true"
+    >
+      观战记录
+    </button>
     <div class="toast" id="toast" role="status"></div>
-    <div class="modal-backdrop hidden" id="rulesBackdrop"><section class="modal rules-modal" role="dialog" aria-modal="true" aria-labelledby="narratedRulesTitle"><button class="modal-close" id="closeRulesIntro" aria-label="关闭规则介绍">×</button><div class="modal-kicker">RULES · LISTEN &amp; WATCH</div><h2 id="narratedRulesTitle">规则介绍</h2><p>自然中文女声，带你了解这一局的玩法。对局中打开介绍会暂停游戏，关闭后点击“继续对局”。</p><div id="narratedRuleSections"></div><div class="rules-intro-footer"><span id="rulesVoiceStatus" role="status"></span><button class="secondary-btn" id="modalReadRulesBtn">▷ 重新播放</button><button class="primary-btn" id="returnToTableBtn">返回游戏桌</button></div></section></div>
-    <div class="modal-backdrop hidden" id="modalBackdrop"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="关闭">×</button><div class="modal-kicker">PLAYER PERSONALITY</div><h2 id="modalTitle">配置 Agent</h2><p id="modalSubtitle">一个席位，一种思考方式。</p><div class="form-row"><label>玩家昵称<input id="nameInput" maxlength="12" /></label><label>控制方式<select id="controlInput"><option value="local">本地模拟 AI</option><option value="api">独立 API Agent</option></select></label></div><section class="manor-settings"><label class="full-label">席位立绘<select id="manorPortraitInput" aria-label="席位立绘"></select></label><div id="manorPortraitPreview" class="manor-portrait-preview"></div><p>立绘固定跟随席位，随机发牌不会改变外观。6 / 12 人间均可选择十二位正式人物，也可使用当前头像。</p></section><label class="full-label">卡通形象</label><div class="avatar-picker" id="avatarPicker"></div><label class="full-label">自定义头像图片（本机上传，最大 1MB）<input id="avatarUpload" type="file" accept="image/png,image/jpeg,image/webp"></label><div class="form-row"><label>模型名称<input id="modelInput" placeholder="例如：你的模型 ID" /></label><label>接口地址（网站地址或完整路径）<input id="endpointInput" placeholder="https://api.hualong-ai.com/v1/responses" /></label></div><p class="agent-reasoning" id="agentProtocolInfo">API 协议 · Responses</p><label class="full-label">推理强度<select id="reasoningEffortInput"><option value="medium">中（medium）</option><option value="high">高（high）</option><option value="xhigh">超高（xhigh）</option></select></label><p class="agent-reasoning" id="reasoningEffortInfo">仅 API Agent 请求使用此设置。本地模拟席位不会发送推理参数。</p><label class="full-label">API Key <div class="key-input"><input id="keyInput" type="password" autocomplete="off" placeholder="填写供应商提供的 API Key" /><button id="showKey">显示</button></div></label><label class="remember-key"><input id="rememberKeyInput" type="checkbox" checked>在此浏览器记住 API Key（重启后自动恢复）</label><p class="key-storage-note">勾选后密钥以明文保存在此浏览器本地。取消勾选并保存可删除已存密钥。请使用同一浏览器和 http://127.0.0.1:4173 访问。</p><label class="full-label">人物性格<textarea id="personalityInput" maxlength="500" rows="2" placeholder="例如：谨慎、爱分析票型，偶尔幽默"></textarea></label><section class="voice-settings" aria-labelledby="voiceSettingsTitle">
-<h3 id="voiceSettingsTitle">♫ 这位玩家的声音</h3><p>声音跟随人物形象，与随机分配的身份无关。已手动设置的声音继续保留。</p><label class="full-label">声音搭配<select id="voiceMatchInput"><option value="portrait">跟随庄园形象推荐</option><option value="custom">使用自定义声音</option></select></label><p class="voice-match-note" id="voiceMatchNote"></p>
-<div class="form-row"><label>语音方式<select id="voiceProviderInput"></select></label><label id="neuralVoiceFields">自然音色<select id="playerVoiceInput"></select></label></div>
-<div id="apiVoiceFields" class="hidden"><div class="form-row"><label>语音接口地址<input id="voiceEndpointInput" placeholder="https://你的语音服务地址/v1/audio/speech" autocomplete="off"></label><label>语音模型<input id="voiceModelInput" placeholder="填写供应商的语音模型 ID"></label></div><div class="form-row"><label>音色 ID<input id="voiceApiVoiceInput" placeholder="例如 coral，需供应商支持"></label><label>语音 API Key<input id="voiceKeyInput" type="password" autocomplete="off" placeholder="语音服务专用密钥"></label></div><label class="remember-key"><input id="rememberVoiceKeyInput" type="checkbox" checked>在此浏览器记住语音密钥（明文保存在本地）</label></div>
-<div class="form-row"><label>情绪风格<select id="voiceStyleInput"></select></label><label>说话速度<select id="voiceSpeedInput"><option value="0.85">舒缓</option><option value="1">自然</option><option value="1.15">轻快</option></select></label></div>
-<p id="voiceHelp" class="voice-help"></p><div class="voice-preview"><label>试听内容<select id="voicePreviewTextInput"><option value="analysis">分析 · 整理线索</option><option value="question">追问 · 提出怀疑</option><option value="defense">辩解 · 坚定说明</option></select></label><button class="secondary-btn" id="voicePreviewBtn">▷ 试听当前声音</button><span id="voicePreviewStatus" role="status"></span></div></section><div class="modal-foot"><span class="connection-state" id="connectionState">通过游戏本地服务连接，支持自动补全接口地址</span><button class="secondary-btn" id="testConnection">▷ 测试连接</button><button class="primary-btn" id="saveAgent">保存配置</button></div></div></div>
-    <div class="story-movie-overlay hidden" id="storyMovieOverlay" role="dialog" aria-modal="true" aria-labelledby="storyMovieTitle"><section class="story-movie-shell"><div class="story-movie-head"><span>PROLOGUE / 序幕</span><h2 id="storyMovieTitle">故事即将开始</h2></div><video id="storyMovie" playsinline preload="metadata"></video><div class="story-movie-controls"><p id="storyMovieMessage" role="status">序幕结束后自动进入随机发牌。</p><button id="storyMoviePause" aria-pressed="false">Ⅱ 暂停序幕</button><button id="storyMovieFullscreen">⛶ 全屏观战</button><button id="storyMoviePortrait" aria-pressed="false">▯ 竖屏录制</button><button id="storyMovieSkip">跳过序幕 →</button></div></section></div>
-    <script src="limits.js"></script><script src="agent-request.js"></script>
+    <div class="modal-backdrop hidden" id="rulesBackdrop">
+      <section
+        class="modal rules-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="narratedRulesTitle"
+      >
+        <button class="modal-close" id="closeRulesIntro" aria-label="关闭规则介绍">×</button>
+        <div class="modal-kicker">RULES · LISTEN &amp; WATCH</div>
+        <h2 id="narratedRulesTitle">规则介绍</h2>
+        <p>自然中文女声，带你了解这一局的玩法。对局中打开介绍会暂停游戏，关闭后点击“继续对局”。</p>
+        <div id="narratedRuleSections"></div>
+        <div class="rules-intro-footer">
+          <span id="rulesVoiceStatus" role="status"></span
+          ><button class="secondary-btn" id="modalReadRulesBtn">▷ 重新播放</button
+          ><button class="primary-btn" id="returnToTableBtn">返回游戏桌</button>
+        </div>
+      </section>
+    </div>
+    <div class="modal-backdrop hidden" id="modalBackdrop">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button class="modal-close" id="modalClose" aria-label="关闭">×</button>
+        <div class="modal-kicker">PLAYER PERSONALITY</div>
+        <h2 id="modalTitle">配置 Agent</h2>
+        <p id="modalSubtitle">一个席位，一种思考方式。</p>
+        <div class="form-row">
+          <label>玩家昵称<input id="nameInput" maxlength="12" /></label
+          ><label
+            >控制方式<select id="controlInput">
+              <option value="local">本地模拟 AI</option>
+              <option value="api">独立 API Agent</option>
+            </select></label
+          >
+        </div>
+        <section class="manor-settings">
+          <label class="full-label"
+            >席位立绘<select id="manorPortraitInput" aria-label="席位立绘"></select
+          ></label>
+          <div id="manorPortraitPreview" class="manor-portrait-preview"></div>
+          <p>
+            立绘固定跟随席位，随机发牌不会改变外观。6 / 12
+            人间均可选择十二位正式人物，也可使用当前头像。
+          </p>
+        </section>
+        <label class="full-label">卡通形象</label>
+        <div class="avatar-picker" id="avatarPicker"></div>
+        <label class="full-label"
+          >自定义头像图片（本机上传，最大 1MB）<input
+            id="avatarUpload"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+        /></label>
+        <div class="form-row">
+          <label>模型名称<input id="modelInput" placeholder="例如：你的模型 ID" /></label
+          ><label
+            >接口地址（网站地址或完整路径）<input
+              id="endpointInput"
+              placeholder="https://api.hualong-ai.com/v1/responses"
+          /></label>
+        </div>
+        <p class="agent-reasoning" id="agentProtocolInfo">API 协议 · Responses</p>
+        <label class="full-label"
+          >推理强度<select id="reasoningEffortInput">
+            <option value="medium">中（medium）</option>
+            <option value="high">高（high）</option>
+            <option value="xhigh">超高（xhigh）</option>
+          </select></label
+        >
+        <p class="agent-reasoning" id="reasoningEffortInfo">
+          仅 API Agent 请求使用此设置。本地模拟席位不会发送推理参数。
+        </p>
+        <label class="full-label"
+          >历史上下文<select id="historyContextInput">
+            <option value="recent">最近两轮发言（默认，更快更省）</option>
+            <option value="full">完整历史发言</option>
+          </select></label
+        >
+        <p class="agent-reasoning">投票与夜间行动携带的发言范围；公开事件始终完整携带。</p>
+        <label class="full-label"
+          >API Key
+          <div class="key-input">
+            <input
+              id="keyInput"
+              type="password"
+              autocomplete="off"
+              placeholder="填写供应商提供的 API Key"
+            /><button id="showKey">显示</button>
+          </div></label
+        ><label class="remember-key"
+          ><input id="rememberKeyInput" type="checkbox" checked />在本机记住 API
+          Key（重启后自动恢复）</label
+        >
+        <p class="key-storage-note">
+          通过 http://127.0.0.1:4173 打开时，密钥由本机游戏服务以 Windows
+          当前用户加密保存，浏览器不保存明文；直接打开 HTML
+          文件时才会保存在此浏览器本地。取消勾选并保存可删除已存密钥。
+        </p>
+        <label class="full-label"
+          >人物性格<textarea
+            id="personalityInput"
+            maxlength="500"
+            rows="2"
+            placeholder="例如：谨慎、爱分析票型，偶尔幽默"
+          ></textarea>
+        </label>
+        <section class="voice-settings" aria-labelledby="voiceSettingsTitle">
+          <h3 id="voiceSettingsTitle">♫ 这位玩家的声音</h3>
+          <p>声音跟随人物形象，与随机分配的身份无关。已手动设置的声音继续保留。</p>
+          <label class="full-label"
+            >声音搭配<select id="voiceMatchInput">
+              <option value="portrait">跟随庄园形象推荐</option>
+              <option value="custom">使用自定义声音</option>
+            </select></label
+          >
+          <p class="voice-match-note" id="voiceMatchNote"></p>
+          <div class="form-row">
+            <label>语音方式<select id="voiceProviderInput"></select></label
+            ><label id="neuralVoiceFields">自然音色<select id="playerVoiceInput"></select></label>
+          </div>
+          <div id="apiVoiceFields" class="hidden">
+            <div class="form-row">
+              <label
+                >语音接口地址<input
+                  id="voiceEndpointInput"
+                  placeholder="https://你的语音服务地址/v1/audio/speech"
+                  autocomplete="off" /></label
+              ><label
+                >语音模型<input id="voiceModelInput" placeholder="填写供应商的语音模型 ID"
+              /></label>
+            </div>
+            <div class="form-row">
+              <label
+                >音色 ID<input
+                  id="voiceApiVoiceInput"
+                  placeholder="例如 coral，需供应商支持" /></label
+              ><label
+                >语音 API Key<input
+                  id="voiceKeyInput"
+                  type="password"
+                  autocomplete="off"
+                  placeholder="语音服务专用密钥"
+              /></label>
+            </div>
+            <label class="remember-key"
+              ><input
+                id="rememberVoiceKeyInput"
+                type="checkbox"
+                checked
+              />在此浏览器记住语音密钥（明文保存在本地）</label
+            >
+          </div>
+          <div class="form-row">
+            <label>情绪风格<select id="voiceStyleInput"></select></label
+            ><label
+              >说话速度<select id="voiceSpeedInput">
+                <option value="0.85">舒缓</option>
+                <option value="1">自然</option>
+                <option value="1.15">轻快</option>
+              </select></label
+            >
+          </div>
+          <p id="voiceHelp" class="voice-help"></p>
+          <div class="voice-preview">
+            <label
+              >试听内容<select id="voicePreviewTextInput">
+                <option value="analysis">分析 · 整理线索</option>
+                <option value="question">追问 · 提出怀疑</option>
+                <option value="defense">辩解 · 坚定说明</option>
+              </select></label
+            ><button class="secondary-btn" id="voicePreviewBtn">▷ 试听当前声音</button
+            ><span id="voicePreviewStatus" role="status"></span>
+          </div>
+        </section>
+        <div class="modal-foot">
+          <span class="connection-state" id="connectionState"
+            >通过游戏本地服务连接，支持自动补全接口地址</span
+          ><button class="secondary-btn" id="testConnection">▷ 测试连接</button
+          ><button class="primary-btn" id="saveAgent">保存配置</button>
+        </div>
+      </div>
+    </div>
+    <div
+      class="story-movie-overlay hidden"
+      id="storyMovieOverlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="storyMovieTitle"
+    >
+      <section class="story-movie-shell">
+        <div class="story-movie-head">
+          <span>PROLOGUE / 序幕</span>
+          <h2 id="storyMovieTitle">故事即将开始</h2>
+        </div>
+        <video id="storyMovie" playsinline preload="metadata"></video>
+        <div class="story-movie-controls">
+          <p id="storyMovieMessage" role="status">序幕结束后自动进入随机发牌。</p>
+          <button id="storyMoviePause" aria-pressed="false">Ⅱ 暂停序幕</button
+          ><button id="storyMovieFullscreen">⛶ 全屏观战</button
+          ><button id="storyMoviePortrait" aria-pressed="false">▯ 竖屏录制</button
+          ><button id="storyMovieSkip">跳过序幕 →</button>
+        </div>
+      </section>
+    </div>
+    <script src="limits.js"></script>
+    <script src="agent-request.js"></script>
     <script src="engine.js"></script>
     <script src="voices.js"></script>
     <script src="observer.js"></script>
     <script src="soundfx.js?v=bell-v1"></script>
     <script src="spectator.js"></script>
     <script src="manor.js"></script>
-    <script src="character-intros.js"></script><script src="scenario.js"></script>
+    <script src="character-intros.js"></script>
+    <script src="scenario.js"></script>
     <script src="story-player.js"></script>
     <script src="story-game.js"></script>
-    <script src="api-wait.js"></script><script src="portrait.js"></script><script src="recording-surface.js"></script><script src="recording.js"></script><script src="app.js"></script>
+    <script src="api-wait.js"></script>
+    <script src="portrait.js"></script>
+    <script src="recording-surface.js"></script>
+    <script src="recording.js"></script>
+    <script src="avatar.js"></script>
+    <script src="app-render.js"></script>
+    <script src="app-agent.js"></script>
+    <script src="app-config.js"></script>
+    <script src="app-recording.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

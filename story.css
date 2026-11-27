@@ -1,9 +1,226 @@
-.story-bar{display:flex;align-items:center;gap:18px;padding:13px 18px;margin:0 0 18px;border:1px solid #665032;border-radius:9px;background:linear-gradient(100deg,#3d2a1b,#211913);color:#e9d7bb}.story-bar .story-label{font-size:12px;letter-spacing:2px;color:#d8b57c;white-space:nowrap}.story-bar label{display:flex;gap:10px;align-items:center;min-width:0}.story-bar select{background:#1d1511;color:#ead6b6;border:1px solid #705736;border-radius:5px;padding:8px;max-width:270px}.story-bar p{font-size:12px;color:#bca98d;flex:1;margin:0}.story-bar a{font-size:12px;color:#e8bf79;text-decoration:none;white-space:nowrap}.story-bar button{background:transparent;color:#cdb38d;border:1px solid #644d32;border-radius:4px;padding:7px;cursor:pointer}.story-bar select:disabled{opacity:.6}.story-movie-overlay{position:fixed;inset:0;z-index:1500;display:flex;align-items:center;justify-content:center;background:#080605ed;backdrop-filter:blur(12px);padding:22px}.story-movie-shell{width:min(1120px,100%);max-height:100%;overflow:auto;background:#1d1511;border:1px solid #9b7745;border-radius:12px;box-shadow:0 25px 90px #0009}.story-movie-head{display:flex;align-items:center;gap:16px;padding:16px 22px;border-bottom:1px solid #59412b}.story-movie-head span{font-size:11px;color:#c2a16b;letter-spacing:3px}.story-movie-head h2{font:22px serif;color:#e5ceaa;margin:0}.story-movie-shell video{display:block;width:100%;aspect-ratio:16/9;max-height:70vh;background:#000}.story-movie-controls{padding:16px 22px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}.story-movie-controls p{font-size:12px;color:#c6ad89;margin:0;flex:1;min-width:180px}.story-movie-controls button{padding:9px 12px;border:1px solid #7c5e39;border-radius:5px;background:#3f2b1a;color:#ebcfa4;cursor:pointer}.story-movie-overlay.hidden,.story-bar.hidden{display:none!important}@media(max-width:800px){.story-bar{flex-wrap:wrap;gap:9px}.story-bar p{flex-basis:100%;order:4}.story-bar select{max-width:190px}.story-movie-overlay{padding:10px}.story-movie-head{padding:13px}.story-movie-head h2{font-size:18px}.story-movie-controls{padding:13px}}.watch-mode .story-bar{padding:7px 12px;margin-bottom:8px}.watch-mode .story-bar p{display:none}
-.watch-mode .story-movie-overlay{padding:0;background:#000;backdrop-filter:none;width:100vw;height:100dvh}
-:root:has(.watch-mode .story-movie-overlay:not(.hidden)){overflow:hidden}
-.watch-mode .story-movie-shell{position:relative;width:100%;height:100%;max-height:none;overflow:hidden;border:0;border-radius:0;box-shadow:none;background:#000}
-.watch-mode .story-movie-shell video{width:100%;height:100%;max-height:none;aspect-ratio:auto;object-fit:contain}
-.watch-mode .story-movie-head{position:absolute;inset:0 0 auto;z-index:1;padding:calc(18px + env(safe-area-inset-top)) max(22px,env(safe-area-inset-right)) 30px max(22px,env(safe-area-inset-left));border:0;background:linear-gradient(#000b,transparent);pointer-events:none;text-shadow:0 2px 6px #000}
-.watch-mode .story-movie-controls{position:absolute;inset:auto 0 0;z-index:1;padding:30px max(22px,env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom)) max(22px,env(safe-area-inset-left));background:linear-gradient(transparent,#000d)}
-.watch-mode .story-movie-controls button{background:#21180edb;backdrop-filter:blur(8px)}
-@media(max-width:600px){.watch-mode .story-movie-head{gap:8px;flex-wrap:wrap}.watch-mode .story-movie-head span{font-size:9px}.watch-mode .story-movie-controls{gap:7px}.watch-mode .story-movie-controls p{flex-basis:100%}.watch-mode .story-movie-controls button{padding:10px;font-size:12px}}
+.story-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 13px 18px;
+  margin: 0 0 18px;
+  border: 1px solid #665032;
+  border-radius: 9px;
+  background: linear-gradient(100deg, #3d2a1b, #211913);
+  color: #e9d7bb;
+}
+.story-bar .story-label {
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: #d8b57c;
+  white-space: nowrap;
+}
+.story-bar label {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+.story-bar select {
+  background: #1d1511;
+  color: #ead6b6;
+  border: 1px solid #705736;
+  border-radius: 5px;
+  padding: 8px;
+  max-width: 270px;
+}
+.story-bar p {
+  font-size: 12px;
+  color: #bca98d;
+  flex: 1;
+  margin: 0;
+}
+.story-bar a {
+  font-size: 12px;
+  color: #e8bf79;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.story-bar button {
+  background: transparent;
+  color: #cdb38d;
+  border: 1px solid #644d32;
+  border-radius: 4px;
+  padding: 7px;
+  cursor: pointer;
+}
+.story-bar select:disabled {
+  opacity: 0.6;
+}
+.story-movie-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #080605ed;
+  backdrop-filter: blur(12px);
+  padding: 22px;
+}
+.story-movie-shell {
+  width: min(1120px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  background: #1d1511;
+  border: 1px solid #9b7745;
+  border-radius: 12px;
+  box-shadow: 0 25px 90px #0009;
+}
+.story-movie-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 22px;
+  border-bottom: 1px solid #59412b;
+}
+.story-movie-head span {
+  font-size: 11px;
+  color: #c2a16b;
+  letter-spacing: 3px;
+}
+.story-movie-head h2 {
+  font: 22px serif;
+  color: #e5ceaa;
+  margin: 0;
+}
+.story-movie-shell video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16/9;
+  max-height: 70vh;
+  background: #000;
+}
+.story-movie-controls {
+  padding: 16px 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.story-movie-controls p {
+  font-size: 12px;
+  color: #c6ad89;
+  margin: 0;
+  flex: 1;
+  min-width: 180px;
+}
+.story-movie-controls button {
+  padding: 9px 12px;
+  border: 1px solid #7c5e39;
+  border-radius: 5px;
+  background: #3f2b1a;
+  color: #ebcfa4;
+  cursor: pointer;
+}
+.story-movie-overlay.hidden,
+.story-bar.hidden {
+  display: none !important;
+}
+@media (max-width: 800px) {
+  .story-bar {
+    flex-wrap: wrap;
+    gap: 9px;
+  }
+  .story-bar p {
+    flex-basis: 100%;
+    order: 4;
+  }
+  .story-bar select {
+    max-width: 190px;
+  }
+  .story-movie-overlay {
+    padding: 10px;
+  }
+  .story-movie-head {
+    padding: 13px;
+  }
+  .story-movie-head h2 {
+    font-size: 18px;
+  }
+  .story-movie-controls {
+    padding: 13px;
+  }
+}
+.watch-mode .story-bar {
+  padding: 7px 12px;
+  margin-bottom: 8px;
+}
+.watch-mode .story-bar p {
+  display: none;
+}
+.watch-mode .story-movie-overlay {
+  padding: 0;
+  background: #000;
+  backdrop-filter: none;
+  width: 100vw;
+  height: 100dvh;
+}
+:root:has(.watch-mode .story-movie-overlay:not(.hidden)) {
+  overflow: hidden;
+}
+.watch-mode .story-movie-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: #000;
+}
+.watch-mode .story-movie-shell video {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+.watch-mode .story-movie-head {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 1;
+  padding: calc(18px + env(safe-area-inset-top)) max(22px, env(safe-area-inset-right)) 30px
+    max(22px, env(safe-area-inset-left));
+  border: 0;
+  background: linear-gradient(#000b, transparent);
+  pointer-events: none;
+  text-shadow: 0 2px 6px #000;
+}
+.watch-mode .story-movie-controls {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 1;
+  padding: 30px max(22px, env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom))
+    max(22px, env(safe-area-inset-left));
+  background: linear-gradient(transparent, #000d);
+}
+.watch-mode .story-movie-controls button {
+  background: #21180edb;
+  backdrop-filter: blur(8px);
+}
+@media (max-width: 600px) {
+  .watch-mode .story-movie-head {
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .watch-mode .story-movie-head span {
+    font-size: 9px;
+  }
+  .watch-mode .story-movie-controls {
+    gap: 7px;
+  }
+  .watch-mode .story-movie-controls p {
+    flex-basis: 100%;
+  }
+  .watch-mode .story-movie-controls button {
+    padding: 10px;
+    font-size: 12px;
+  }
+}

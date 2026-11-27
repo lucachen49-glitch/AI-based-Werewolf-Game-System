@@ -1,76 +1,541 @@
 'use strict';
-let rehearsal=NightfallPreview.clean(),rehearsalJob=null,rehearsalTimer=null,rehearsalEpoch=0,assetCatalog=[],rehearsalWatched=false;
-const P=NightfallPreview;
-function closeRehearsalImage(){const dialog=$('artZoom');if(dialog?.dataset.rehearsalImage!==undefined){if(dialog.open)dialog.close();delete dialog.dataset.rehearsalImage;$('artZoomImage').removeAttribute('src');}}
-function renderRehearsalImage(select,{retry=false}={}){
-  const host=select.closest('.rehearsal-tools').querySelector('.rehearsal-image-preview');
-  if(!host)return;
-  const asset=assetCatalog.find(a=>a.id===select.value),key=JSON.stringify([select.value,asset?.url,asset?.kind]);
-  if(!retry&&host.dataset.source===key)return;
-  closeRehearsalImage();host.dataset.source=key;host.replaceChildren();host.setAttribute('aria-busy','false');host.hidden=!select.value;
-  if(!select.value)return;
-  const status=document.createElement('p');status.className='hint';status.setAttribute('role','status');host.append(status);
-  if(!asset){status.textContent='原素材暂不可读取，请点击“重新查询素材”后重试。';return;}
-  if(asset.kind==='scene'){status.textContent='已选择视频素材；此处仅预览图片，视频将在本地预演中播放。';return;}
-  const caption=document.createElement('p');caption.className='rehearsal-image-caption';caption.textContent=asset.label;
-  const imageButton=document.createElement('button');imageButton.type='button';imageButton.className='rehearsal-image-button';imageButton.hidden=true;imageButton.setAttribute('aria-label','放大查看：'+asset.label);
-  const img=document.createElement('img');img.alt=asset.label;imageButton.append(img);
-  const zoom=document.createElement('button');zoom.type='button';zoom.textContent='放大查看';zoom.hidden=true;
-  const again=document.createElement('button');again.type='button';again.textContent='重试加载';again.hidden=true;
-  host.append(caption,imageButton,zoom,again);status.textContent='图片加载中…';host.setAttribute('aria-busy','true');
-  const active=()=>host.isConnected&&host.dataset.source===key&&host.contains(img);
-  const enlarge=()=>{if(!active()||!img.naturalWidth)return;const dialog=$('artZoom');dialog.dataset.rehearsalImage=select.dataset.rehearsalAsset;$('artZoomImage').src=img.src;$('artZoomImage').alt=asset.label;$('artZoomCaption').textContent=asset.label;dialog.showModal();};
-  imageButton.onclick=enlarge;zoom.onclick=enlarge;again.onclick=()=>renderRehearsalImage(select,{retry:true});
-  img.onload=()=>{if(!active())return;host.setAttribute('aria-busy','false');status.textContent='图片已加载，可点击放大查看。';imageButton.hidden=false;zoom.hidden=false;};
-  img.onerror=()=>{if(!active())return;host.setAttribute('aria-busy','false');status.textContent='图片加载失败，已保留素材选择，请重试。';again.hidden=false;};
-  const url=new URL(asset.url,location.href);if(retry)url.searchParams.set('previewRetry',Date.now());img.src=url.href;
+let rehearsal = NightfallPreview.clean(),
+  rehearsalJob = null,
+  rehearsalTimer = null,
+  rehearsalEpoch = 0,
+  assetCatalog = [],
+  rehearsalWatched = false;
+const P = NightfallPreview;
+function closeRehearsalImage() {
+  const dialog = $('artZoom');
+  if (dialog?.dataset.rehearsalImage !== undefined) {
+    if (dialog.open) dialog.close();
+    delete dialog.dataset.rehearsalImage;
+    $('artZoomImage').removeAttribute('src');
+  }
 }
-function resetRehearsal(){closeRehearsalImage();++rehearsalEpoch;clearTimeout(rehearsalTimer);rehearsalJob=null;rehearsalWatched=false;const player=document.getElementById('rehearsalVideo');if(player){player.pause();player.removeAttribute('src');player.load();}document.getElementById('rehearsalProgress')?.replaceChildren();const msg=document.getElementById('rehearsalMessage');if(msg)msg.textContent='尚未制作当前版本预演。';const link=document.getElementById('downloadRehearsal');if(link)link.hidden=true;}
-function narrativeReady(){return !!rehearsalJob?.confirmed&&rehearsalJob.version===current?.version&&rehearsalJob.storyId===current?.id&&rehearsalJob.fingerprint===P.fingerprint(rawDraft(),rehearsal)&&!dirty;}
-function watchedReceipt(j){return !!j&&rehearsal.watchedPreview?.id===j.id&&rehearsal.watchedPreview?.fingerprint===j.fingerprint;}
-function renderRehearsalConfirmation(d,errors){
-  const issues=P.confirmationIssues(d,rehearsal,{job:rehearsalJob,current,dirty,busy:loading,watched:rehearsalWatched,errors});
-  const blockers=$('rehearsalBlockers');if(blockers){const text=issues.map(x=>'<li>'+esc(x)+'</li>').join('');if(blockers.innerHTML!==text)blockers.innerHTML=text;}
-  const status=$('rehearsalWatchStatus');if(status)status.textContent=narrativeReady()?'当前叙事已确认，可以继续人物与分镜制作。':rehearsalWatched?'已完整观看本次预演。'+(issues.length?'请完成下方剩余事项。':'可以确认当前叙事。'):'尚未完整观看当前预演；观看完成后会保存在本浏览器，刷新不必重看。';
-  const list=$('rehearsalReviewList');if(list){const key=P.signature(d.scenes.map((x,i)=>i?P.transition(d,i):null));if(list.dataset.version!==key){list.dataset.version=key;list.innerHTML=d.scenes.slice(1).map((x,n)=>`<div class="rehearsal-review-item"><label><input type="checkbox" data-transition-check="${n+1}">镜头 ${n+1} → ${n+2}：已核对衔接</label><a href="#shot-${n+1}">查看前后画面</a></div>`).join('');}const total=Math.max(0,d.scenes.length-1),remaining=P.continuityIssues(d,rehearsal).length;$('rehearsalReviewCount').textContent=`${total-remaining} / ${total}`;}
-  $('confirmRehearsal').disabled=issues.length>0||narrativeReady();$('confirmRehearsal').textContent=narrativeReady()?'当前叙事已确认':'完整观看后，确认当前叙事';
+function renderRehearsalImage(select, { retry = false } = {}) {
+  const host = select.closest('.rehearsal-tools').querySelector('.rehearsal-image-preview');
+  if (!host) return;
+  const asset = assetCatalog.find((a) => a.id === select.value),
+    key = JSON.stringify([select.value, asset?.url, asset?.kind]);
+  if (!retry && host.dataset.source === key) return;
+  closeRehearsalImage();
+  host.dataset.source = key;
+  host.replaceChildren();
+  host.setAttribute('aria-busy', 'false');
+  host.hidden = !select.value;
+  if (!select.value) return;
+  const status = document.createElement('p');
+  status.className = 'hint';
+  status.setAttribute('role', 'status');
+  host.append(status);
+  if (!asset) {
+    status.textContent = '原素材暂不可读取，请点击“重新查询素材”后重试。';
+    return;
+  }
+  if (asset.kind === 'scene') {
+    status.textContent = '已选择视频素材；此处仅预览图片，视频将在本地预演中播放。';
+    return;
+  }
+  const caption = document.createElement('p');
+  caption.className = 'rehearsal-image-caption';
+  caption.textContent = asset.label;
+  const imageButton = document.createElement('button');
+  imageButton.type = 'button';
+  imageButton.className = 'rehearsal-image-button';
+  imageButton.hidden = true;
+  imageButton.setAttribute('aria-label', '放大查看：' + asset.label);
+  const img = document.createElement('img');
+  img.alt = asset.label;
+  imageButton.append(img);
+  const zoom = document.createElement('button');
+  zoom.type = 'button';
+  zoom.textContent = '放大查看';
+  zoom.hidden = true;
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.textContent = '重试加载';
+  again.hidden = true;
+  host.append(caption, imageButton, zoom, again);
+  status.textContent = '图片加载中…';
+  host.setAttribute('aria-busy', 'true');
+  const active = () => host.isConnected && host.dataset.source === key && host.contains(img);
+  const enlarge = () => {
+    if (!active() || !img.naturalWidth) return;
+    const dialog = $('artZoom');
+    dialog.dataset.rehearsalImage = select.dataset.rehearsalAsset;
+    $('artZoomImage').src = img.src;
+    $('artZoomImage').alt = asset.label;
+    $('artZoomCaption').textContent = asset.label;
+    dialog.showModal();
+  };
+  imageButton.onclick = enlarge;
+  zoom.onclick = enlarge;
+  again.onclick = () => renderRehearsalImage(select, { retry: true });
+  img.onload = () => {
+    if (!active()) return;
+    host.setAttribute('aria-busy', 'false');
+    status.textContent = '图片已加载，可点击放大查看。';
+    imageButton.hidden = false;
+    zoom.hidden = false;
+  };
+  img.onerror = () => {
+    if (!active()) return;
+    host.setAttribute('aria-busy', 'false');
+    status.textContent = '图片加载失败，已保留素材选择，请重试。';
+    again.hidden = false;
+  };
+  const url = new URL(asset.url, location.href);
+  if (retry) url.searchParams.set('previewRetry', Date.now());
+  img.src = url.href;
 }
-function requiresNarrative(){return roomSize===6&&renderedDraft?.narrativeMode==='continuity-v1';}
-function previewChecks(){const panel=$('rehearsalPanel'),preflight=$('preflightPanel');if(panel)panel.hidden=true;if(preflight)preflight.hidden=true;}
-function previewSceneTools(d){closeRehearsalImage();if(!cinematic)return;document.querySelectorAll('#scenes>.scene').forEach((el,i)=>{el.id='shot-'+i;el.querySelector('.rehearsal-tools')?.remove();if(!i)return;const prev=d.scenes[i-1],x=d.scenes[i],tools=document.createElement('section');tools.className='rehearsal-tools';tools.innerHTML=`<p class="hint">请对照人物站位、动作和道具检查衔接。制作使用文字与参考图，实际画面需逐镜预览。</p><div class="continuity-pair"><div><small>前镜结束 · 镜${i}</small><p>${esc(prev.endFrame||'未填结束画面')}</p><small>出场 ${(prev.cast||[]).join('、')} · ${esc((prev.dialogues||[]).map(l=>l.seat+'号：'+l.text).join(' / '))}</small></div><div><small>本镜开始 · 镜${i+1}</small><p>${esc(x.startFrame||'未填起始画面')}</p><small>出场 ${(x.cast||[]).join('、')} · ${esc(x.description)}</small></div></div>`;el.append(tools);});previewChecks();}
-function fillAssetSelectors(){
-  const host=$('reuseCharacters');if(!host)return;const reuse=rehearsal.reuse||{},frames=rehearsal.reuseFrames||{},draft=rawDraft();
-  host.innerHTML='<p class="hint">只复用外观一致的人物定妆照；旧分镜图作为待确认素材。复制不会调用图片模型，原任务保持不变。</p>'+draft.characters.map(c=>`<label>${c.seat}号 ${esc(c.name||'人物')} · 定妆照<select data-reuse-character="${c.seat}"><option value="">不复用</option>${assetCatalog.filter(a=>a.kind==='character'&&a.seat===c.seat&&a.name===c.name&&a.appearance===S.appearance(c)).map(a=>`<option value="${a.id}">${esc(a.label)}</option>`).join('')}</select></label>`).join('')+draft.scenes.map((s,i)=>`<label>镜头 ${i+1} · 分镜图<select data-reuse-frame="${i}"><option value="">不复用</option>${assetCatalog.filter(a=>a.kind==='frame'&&a.index===i).map(a=>`<option value="${a.id}">${esc(a.label)}</option>`).join('')}</select></label>`).join('');
-  document.querySelectorAll('[data-reuse-character]').forEach(el=>el.value=reuse[el.dataset.reuseCharacter]||'');document.querySelectorAll('[data-reuse-frame]').forEach(el=>el.value=frames[el.dataset.reuseFrame]||'');
+function resetRehearsal() {
+  closeRehearsalImage();
+  ++rehearsalEpoch;
+  clearTimeout(rehearsalTimer);
+  rehearsalJob = null;
+  rehearsalWatched = false;
+  const player = document.getElementById('rehearsalVideo');
+  if (player) {
+    player.pause();
+    player.removeAttribute('src');
+    player.load();
+  }
+  document.getElementById('rehearsalProgress')?.replaceChildren();
+  const msg = document.getElementById('rehearsalMessage');
+  if (msg) msg.textContent = '尚未制作当前版本预演。';
+  const link = document.getElementById('downloadRehearsal');
+  if (link) link.hidden = true;
 }
-function showRehearsal(j){const change=rehearsalJob?.id!==j.id;rehearsalJob=j;rehearsal.previewId=j.id;$('rehearsalMessage').textContent=({voicing:'临时配音',visual:'画面与字幕',assembling:'连续合成',complete:'预演完成'}[j.stage]||'等待处理')+' · '+j.message;$('rehearsalProgress').innerHTML=j.scenes.map((x,i)=>`<li>镜头 ${i+1} · ${x.duration}秒 · ${x.status==='done'?'已保存':x.status==='processing'?'正在处理':'等待'} · ${x.visual==='video'?'旧视频画面':x.visual==='missing'?'缺少画面 / 静态示意':'静态分镜预演'}</li>`).join('');$('rehearsalVideo').hidden=!j.url;$('downloadRehearsal').hidden=!j.url;if(j.url){$('downloadRehearsal').href=j.url;if(change||!$('rehearsalVideo').getAttribute('src')){$('rehearsalVideo').src=j.url;rehearsalWatched=watchedReceipt(j);}}updateButtons();persistWorkshop();if(j.status==='running'){clearTimeout(rehearsalTimer);rehearsalTimer=setTimeout(pollRehearsal,1800)}}
-async function pollRehearsal(){const id=rehearsalJob?.id,epoch=rehearsalEpoch;if(!id)return;try{const j=await api('/api/story-preview-jobs/'+id);if(epoch===rehearsalEpoch&&id===rehearsalJob?.id)showRehearsal(j)}catch(e){if(epoch!==rehearsalEpoch)return;$('rehearsalMessage').textContent='查询中断，已完成素材仍保留：'+e.message;rehearsalTimer=setTimeout(pollRehearsal,5000)}}
-async function loadRehearsals(){const epoch=++rehearsalEpoch,id=current?.id,version=current?.version;clearTimeout(rehearsalTimer);const results=await Promise.allSettled([api('/api/story-assets?roomSize='+roomSize),id?api('/api/story-preview-jobs?storyId='+id):Promise.resolve([])]);if(epoch!==rehearsalEpoch||current?.id!==id||current?.version!==version)return;if(results[0].status==='fulfilled')assetCatalog=results[0].value;else $('rehearsalMessage').textContent='素材目录暂未读到，可重新查询；原选择仍保留。';if(results[1].status==='fulfilled'){const rows=results[1].value;const match=j=>j.version===version&&j.fingerprint===P.fingerprint(rawDraft(),rehearsal),pinned=rows.find(j=>j.id===rehearsal.previewId);let selected=pinned&&match(pinned)?pinned:rows.find(match)||pinned;
-    // A saved server task can restore its exact sources when this browser has no local choices.
-    if(!selected&&!dirty&&!rehearsal.previewId&&!Object.keys(rehearsal.selections).length)for(const candidate of rows){if(candidate.version!==version)continue;const selections={};candidate.scenes.forEach((x,i)=>{if(x.source)selections[i]={asset:x.source.asset,start:x.source.start,...(x.visual==='video'?{end:x.source.end}:{})}});const restored=P.clean({...rehearsal,selections:candidate.selections||selections});if(candidate.fingerprint===P.fingerprint(rawDraft(),restored)){rehearsal=restored;selected=candidate;break}}
-    // Show the last preview even when its configuration is stale, with an explicit free remake action.
-    if(!selected&&!rehearsal.previewId&&!dirty&&!Object.keys(rehearsal.selections).length){selected=rows.find(j=>j.version===version);if(selected?.selections)rehearsal=P.clean({...rehearsal,selections:selected.selections});}
-    if(selected?.confirmed&&selected.version===version&&selected.fingerprint===P.fingerprint(rawDraft(),rehearsal))rehearsal.reviews={...selected.reviews,...rehearsal.reviews};
-    fillAssetSelectors();previewChecks();if(selected)showRehearsal(selected);else $('rehearsalMessage').textContent='尚未制作当前版本的本地预演。';}else{fillAssetSelectors();previewChecks();$('rehearsalMessage').textContent='预演进度暂未读取，已保留本机选择，可重新查询。';}}
-function initRehearsalUI(){
-  document.querySelector('#reuseCharacters')?.closest('details')?.remove();const artPanel=document.querySelector('.art-panel'),reuseDetails=document.createElement('details');reuseDetails.className='reuse-art';reuseDetails.innerHTML='<summary>从旧任务复用图片（可选）</summary><div id="reuseCharacters" class="reuse-characters"></div><button id="importOldArt" type="button">复制选中图片为待确认素材</button><p id="reuseArtMessage" class="hint" role="status"></p>';artPanel?.append(reuseDetails);
-  $('artZoom').addEventListener('close',()=>{if($('artZoom').dataset.rehearsalImage!==undefined){delete $('artZoom').dataset.rehearsalImage;$('artZoomImage').removeAttribute('src');}});
-  reuseDetails.addEventListener('change',e=>{if(e.target.dataset.reuseCharacter){rehearsal.reuse||={};if(e.target.value)rehearsal.reuse[e.target.dataset.reuseCharacter]=e.target.value;else delete rehearsal.reuse[e.target.dataset.reuseCharacter];persistWorkshop()}if(e.target.dataset.reuseFrame!==undefined){rehearsal.reuseFrames||={};if(e.target.value)rehearsal.reuseFrames[e.target.dataset.reuseFrame]=e.target.value;else delete rehearsal.reuseFrames[e.target.dataset.reuseFrame];persistWorkshop()}});
-  const localAction=fn=>guard(async()=>{try{if(restoreBlocked||!workshopReady)throw Error('请先在页面顶部完成草稿恢复，再制作本地预演');await fn()}catch(e){$('rehearsalMessage').textContent='本地预演未能继续：'+e.message;throw e}});
-  $('makeRehearsal').onclick=localAction(async()=>{if(dirty||!current)throw Error('请先保存当前剧本');const draft=read(),issues=[...P.preflight(draft,rehearsal,{requireReviews:false}),...NightfallIntros.issues(draft)];if(issues.length)throw Error(issues.join('；'));$('rehearsalMessage').textContent='正在保存本地预演任务…';showRehearsal(await api('/api/story-preview-jobs',{storyId:current.id,version:current.version,rehearsal},{timeoutMs:30000}));notice(rehearsalJob.status==='running'?'预演已开始，只使用已有画面与免费语音，不调用付费图片或视频模型。':rehearsalJob.status==='paused'?'已找到上次预演。请查看下方停止原因，点击“继续本地处理”恢复。':'当前素材的预演已制作完成，可直接播放。')});
-  $('resumeRehearsal').onclick=localAction(async()=>{$('rehearsalMessage').textContent='正在恢复本地处理…';showRehearsal(await api('/api/story-preview-jobs/'+rehearsalJob.id,{action:'resume'},{timeoutMs:30000}))});
-  $('confirmRehearsal').onclick=localAction(async()=>{const issues=P.confirmationIssues(rawDraft(),rehearsal,{job:rehearsalJob,current,dirty,watched:rehearsalWatched,errors:[...P.preflight(rawDraft(),rehearsal,{requireReviews:false}),...NightfallIntros.issues(rawDraft())]});if(issues.length)throw Error(issues.join('；'));showRehearsal(await api('/api/story-preview-jobs/'+rehearsalJob.id,{action:'confirm',watched:true,fingerprint:P.fingerprint(read(),rehearsal),rehearsal}));notice('已确认当前版本叙事。可复用并重新确认人物、分镜；尚未提交正式生成。')});
-  $('rehearsalVideo').addEventListener('ended',()=>{
-    const v=$('rehearsalVideo'),j=rehearsalJob;if(!j?.url||new URL(j.url,location.href).href!==v.currentSrc)return;
-    const ranges=Array.from({length:v.played.length},(_,i)=>[v.played.start(i),v.played.end(i)]);
-    rehearsalWatched=P.fullPlayback(ranges,v.duration)||watchedReceipt(j);
-    if(rehearsalWatched)rehearsal.watchedPreview={id:j.id,fingerprint:j.fingerprint};
-    else notice('尚有未观看片段。请完整观看；跳至结尾不会记录完成。');updateButtons();persistWorkshop();
+function narrativeReady() {
+  return (
+    !!rehearsalJob?.confirmed &&
+    rehearsalJob.version === current?.version &&
+    rehearsalJob.storyId === current?.id &&
+    rehearsalJob.fingerprint === P.fingerprint(rawDraft(), rehearsal) &&
+    !dirty
+  );
+}
+function watchedReceipt(j) {
+  return (
+    !!j &&
+    rehearsal.watchedPreview?.id === j.id &&
+    rehearsal.watchedPreview?.fingerprint === j.fingerprint
+  );
+}
+function renderRehearsalConfirmation(d, errors) {
+  const issues = P.confirmationIssues(d, rehearsal, {
+    job: rehearsalJob,
+    current,
+    dirty,
+    busy: loading,
+    watched: rehearsalWatched,
+    errors,
   });
-  $('refreshAssets').onclick=guard(loadRehearsals);
-  $('revisionDraft').onclick=guard(async()=>{const d=rawDraft();current=null;clearJob();rehearsal.previewId=null;d.title=(d.title.replace(/·连贯修订$/,'')+'·连贯修订').slice(0,60);d.confirmed=false;d.narrativeMode='continuity-v1';dirty=true;render(d);$('library').value='';await loadRehearsals();notice('已复制为独立修订草稿，原剧本、素材和已采用视频保留。')});
-  $('importOldArt').onclick=guard(async()=>{const characters={},frames={};document.querySelectorAll('[data-reuse-character]').forEach(el=>{if(el.value)characters[el.dataset.reuseCharacter]=el.value});document.querySelectorAll('[data-reuse-frame]').forEach(el=>{if(el.value)frames[el.dataset.reuseFrame]=el.value});if(!current?.id||!current.confirmed||generationDraftChanged())throw Error('请先保存并确认当前剧本版本');if(art)throw Error('当前版本已有图片任务；请建立修订版后再复用，避免覆盖原图片任务');showArt(await api('/api/story-art-import',{storyId:current.id,version:current.version,roomSize,characters,frames}));notice('已复制为当前版本的待确认图片。没有生成费用，原任务未改变。')});
-  document.addEventListener('input',e=>{const el=e.target;if(el.dataset.transitionCheck!==undefined){const i=+el.dataset.transitionCheck;if(el.checked)rehearsal.reviews[i]=P.transition(rawDraft(),i);else delete rehearsal.reviews[i];}else if(el.dataset.rehearsalAsset!==undefined){const i=el.dataset.rehearsalAsset;if(el.value)rehearsal.selections[i]={asset:el.value,start:0};else delete rehearsal.selections[i];renderRehearsalImage(el);}else if(el.dataset.rehearsalStart!==undefined||el.dataset.rehearsalEnd!==undefined){const i=el.dataset.rehearsalStart??el.dataset.rehearsalEnd;if(rehearsal.selections[i]){if(el.dataset.rehearsalStart!==undefined)rehearsal.selections[i].start=Number(el.value);else if(el.value==='')delete rehearsal.selections[i].end;else rehearsal.selections[i].end=Number(el.value)}}else return;if(el.dataset.transitionCheck===undefined){rehearsalWatched=false;delete rehearsal.watchedPreview;}updateButtons();persistWorkshop();});
+  const blockers = $('rehearsalBlockers');
+  if (blockers) {
+    const text = issues.map((x) => '<li>' + esc(x) + '</li>').join('');
+    // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
+    if (blockers.innerHTML !== text) blockers.innerHTML = text;
+  }
+  const status = $('rehearsalWatchStatus');
+  if (status)
+    status.textContent = narrativeReady()
+      ? '当前叙事已确认，可以继续人物与分镜制作。'
+      : rehearsalWatched
+        ? '已完整观看本次预演。' + (issues.length ? '请完成下方剩余事项。' : '可以确认当前叙事。')
+        : '尚未完整观看当前预演；观看完成后会保存在本浏览器，刷新不必重看。';
+  const list = $('rehearsalReviewList');
+  if (list) {
+    const key = P.signature(d.scenes.map((x, i) => (i ? P.transition(d, i) : null)));
+    if (list.dataset.version !== key) {
+      list.dataset.version = key;
+      // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
+      list.innerHTML = d.scenes
+        .slice(1)
+        .map(
+          (x, n) =>
+            `<div class="rehearsal-review-item"><label><input type="checkbox" data-transition-check="${n + 1}">镜头 ${n + 1} → ${n + 2}：已核对衔接</label><a href="#shot-${n + 1}">查看前后画面</a></div>`,
+        )
+        .join('');
+    }
+    const total = Math.max(0, d.scenes.length - 1),
+      remaining = P.continuityIssues(d, rehearsal).length;
+    $('rehearsalReviewCount').textContent = `${total - remaining} / ${total}`;
+  }
+  $('confirmRehearsal').disabled = issues.length > 0 || narrativeReady();
+  $('confirmRehearsal').textContent = narrativeReady()
+    ? '当前叙事已确认'
+    : '完整观看后，确认当前叙事';
 }
-function updateContinuity(d){document.querySelectorAll('.continuity-pair').forEach(el=>{const i=Number(el.closest('.scene').id.replace('shot-','')),prev=d.scenes[i-1],now=d.scenes[i];const parts=el.querySelectorAll('p');parts[0].textContent=prev.endFrame||'未填结束画面';parts[1].textContent=now.startFrame||'未填起始画面';const small=el.querySelectorAll('small');small[1].textContent='出场 '+(prev.cast||[]).join('、')+' · '+(prev.dialogues||[]).map(x=>x.seat+'号：'+x.text).join(' / ');small[3].textContent='出场 '+(now.cast||[]).join('、')+' · '+now.description+' · '+(now.dialogues||[]).map(x=>x.seat+'号：'+x.text).join(' / ');});}
-
+function requiresNarrative() {
+  return roomSize === 6 && renderedDraft?.narrativeMode === 'continuity-v1';
+}
+function previewChecks() {
+  const panel = $('rehearsalPanel'),
+    preflight = $('preflightPanel');
+  if (panel) panel.hidden = true;
+  if (preflight) preflight.hidden = true;
+}
+function previewSceneTools(d) {
+  closeRehearsalImage();
+  if (!cinematic) return;
+  document.querySelectorAll('#scenes>.scene').forEach((el, i) => {
+    el.id = 'shot-' + i;
+    el.querySelector('.rehearsal-tools')?.remove();
+    if (!i) return;
+    const prev = d.scenes[i - 1],
+      x = d.scenes[i],
+      tools = document.createElement('section');
+    tools.className = 'rehearsal-tools';
+    // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
+    tools.innerHTML = `<p class="hint">请对照人物站位、动作和道具检查衔接。制作使用文字与参考图，实际画面需逐镜预览。</p><div class="continuity-pair"><div><small>前镜结束 · 镜${i}</small><p>${esc(prev.endFrame || '未填结束画面')}</p><small>出场 ${esc((prev.cast || []).join('、'))} · ${esc((prev.dialogues || []).map((l) => l.seat + '号：' + l.text).join(' / '))}</small></div><div><small>本镜开始 · 镜${i + 1}</small><p>${esc(x.startFrame || '未填起始画面')}</p><small>出场 ${esc((x.cast || []).join('、'))} · ${esc(x.description)}</small></div></div>`;
+    el.append(tools);
+  });
+  previewChecks();
+}
+function fillAssetSelectors() {
+  const host = $('reuseCharacters');
+  if (!host) return;
+  const reuse = rehearsal.reuse || {},
+    frames = rehearsal.reuseFrames || {},
+    draft = rawDraft();
+  // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
+  host.innerHTML =
+    '<p class="hint">只复用外观一致的人物定妆照；旧分镜图作为待确认素材。复制不会调用图片模型，原任务保持不变。</p>' +
+    draft.characters
+      .map(
+        (c) =>
+          `<label>${esc(c.seat)}号 ${esc(c.name || '人物')} · 定妆照<select data-reuse-character="${esc(c.seat)}"><option value="">不复用</option>${assetCatalog
+            .filter(
+              (a) =>
+                a.kind === 'character' &&
+                a.seat === c.seat &&
+                a.name === c.name &&
+                a.appearance === S.appearance(c),
+            )
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`)
+            .join('')}</select></label>`,
+      )
+      .join('') +
+    draft.scenes
+      .map(
+        (s, i) =>
+          `<label>镜头 ${i + 1} · 分镜图<select data-reuse-frame="${i}"><option value="">不复用</option>${assetCatalog
+            .filter((a) => a.kind === 'frame' && a.index === i)
+            .map((a) => `<option value="${esc(a.id)}">${esc(a.label)}</option>`)
+            .join('')}</select></label>`,
+      )
+      .join('');
+  document
+    .querySelectorAll('[data-reuse-character]')
+    .forEach((el) => (el.value = reuse[el.dataset.reuseCharacter] || ''));
+  document
+    .querySelectorAll('[data-reuse-frame]')
+    .forEach((el) => (el.value = frames[el.dataset.reuseFrame] || ''));
+}
+function showRehearsal(j) {
+  const change = rehearsalJob?.id !== j.id;
+  rehearsalJob = j;
+  rehearsal.previewId = j.id;
+  $('rehearsalMessage').textContent =
+    ({ voicing: '临时配音', visual: '画面与字幕', assembling: '连续合成', complete: '预演完成' }[
+      j.stage
+    ] || '等待处理') +
+    ' · ' +
+    j.message;
+  // eslint-disable-next-line no-unsanitized/property -- Story text and asset values are escaped, with remaining values numeric indices.
+  $('rehearsalProgress').innerHTML = j.scenes
+    .map(
+      (x, i) =>
+        `<li>镜头 ${i + 1} · ${x.duration}秒 · ${x.status === 'done' ? '已保存' : x.status === 'processing' ? '正在处理' : '等待'} · ${x.visual === 'video' ? '旧视频画面' : x.visual === 'missing' ? '缺少画面 / 静态示意' : '静态分镜预演'}</li>`,
+    )
+    .join('');
+  $('rehearsalVideo').hidden = !j.url;
+  $('downloadRehearsal').hidden = !j.url;
+  if (j.url) {
+    $('downloadRehearsal').href = j.url;
+    if (change || !$('rehearsalVideo').getAttribute('src')) {
+      $('rehearsalVideo').src = j.url;
+      rehearsalWatched = watchedReceipt(j);
+    }
+  }
+  updateButtons();
+  persistWorkshop();
+  if (j.status === 'running') {
+    clearTimeout(rehearsalTimer);
+    rehearsalTimer = setTimeout(pollRehearsal, 1800);
+  }
+}
+async function pollRehearsal() {
+  const id = rehearsalJob?.id,
+    epoch = rehearsalEpoch;
+  if (!id) return;
+  try {
+    const j = await api('/api/story-preview-jobs/' + id);
+    if (epoch === rehearsalEpoch && id === rehearsalJob?.id) showRehearsal(j);
+  } catch (e) {
+    if (epoch !== rehearsalEpoch) return;
+    $('rehearsalMessage').textContent = '查询中断，已完成素材仍保留：' + e.message;
+    rehearsalTimer = setTimeout(pollRehearsal, 5000);
+  }
+}
+async function loadRehearsals() {
+  const epoch = ++rehearsalEpoch,
+    id = current?.id,
+    version = current?.version;
+  clearTimeout(rehearsalTimer);
+  const results = await Promise.allSettled([
+    api('/api/story-assets?roomSize=' + roomSize),
+    id ? api('/api/story-preview-jobs?storyId=' + id) : Promise.resolve([]),
+  ]);
+  if (epoch !== rehearsalEpoch || current?.id !== id || current?.version !== version) return;
+  if (results[0].status === 'fulfilled') assetCatalog = results[0].value;
+  else $('rehearsalMessage').textContent = '素材目录暂未读到，可重新查询；原选择仍保留。';
+  if (results[1].status === 'fulfilled') {
+    const rows = results[1].value;
+    const match = (j) =>
+        j.version === version && j.fingerprint === P.fingerprint(rawDraft(), rehearsal),
+      pinned = rows.find((j) => j.id === rehearsal.previewId);
+    let selected = pinned && match(pinned) ? pinned : rows.find(match) || pinned;
+    // A saved server task can restore its exact sources when this browser has no local choices.
+    if (!selected && !dirty && !rehearsal.previewId && !Object.keys(rehearsal.selections).length)
+      for (const candidate of rows) {
+        if (candidate.version !== version) continue;
+        const selections = {};
+        candidate.scenes.forEach((x, i) => {
+          if (x.source)
+            selections[i] = {
+              asset: x.source.asset,
+              start: x.source.start,
+              ...(x.visual === 'video' ? { end: x.source.end } : {}),
+            };
+        });
+        const restored = P.clean({ ...rehearsal, selections: candidate.selections || selections });
+        if (candidate.fingerprint === P.fingerprint(rawDraft(), restored)) {
+          rehearsal = restored;
+          selected = candidate;
+          break;
+        }
+      }
+    // Show the last preview even when its configuration is stale, with an explicit free remake action.
+    if (!selected && !rehearsal.previewId && !dirty && !Object.keys(rehearsal.selections).length) {
+      selected = rows.find((j) => j.version === version);
+      if (selected?.selections)
+        rehearsal = P.clean({ ...rehearsal, selections: selected.selections });
+    }
+    if (
+      selected?.confirmed &&
+      selected.version === version &&
+      selected.fingerprint === P.fingerprint(rawDraft(), rehearsal)
+    )
+      rehearsal.reviews = { ...selected.reviews, ...rehearsal.reviews };
+    fillAssetSelectors();
+    previewChecks();
+    if (selected) showRehearsal(selected);
+    else $('rehearsalMessage').textContent = '尚未制作当前版本的本地预演。';
+  } else {
+    fillAssetSelectors();
+    previewChecks();
+    $('rehearsalMessage').textContent = '预演进度暂未读取，已保留本机选择，可重新查询。';
+  }
+}
+function initRehearsalUI() {
+  document.querySelector('#reuseCharacters')?.closest('details')?.remove();
+  const artPanel = document.querySelector('.art-panel'),
+    reuseDetails = document.createElement('details');
+  reuseDetails.className = 'reuse-art';
+  reuseDetails.innerHTML =
+    '<summary>从旧任务复用图片（可选）</summary><div id="reuseCharacters" class="reuse-characters"></div><button id="importOldArt" type="button">复制选中图片为待确认素材</button><p id="reuseArtMessage" class="hint" role="status"></p>';
+  artPanel?.append(reuseDetails);
+  $('artZoom').addEventListener('close', () => {
+    if ($('artZoom').dataset.rehearsalImage !== undefined) {
+      delete $('artZoom').dataset.rehearsalImage;
+      $('artZoomImage').removeAttribute('src');
+    }
+  });
+  reuseDetails.addEventListener('change', (e) => {
+    if (e.target.dataset.reuseCharacter) {
+      rehearsal.reuse ||= {};
+      if (e.target.value) rehearsal.reuse[e.target.dataset.reuseCharacter] = e.target.value;
+      else delete rehearsal.reuse[e.target.dataset.reuseCharacter];
+      persistWorkshop();
+    }
+    if (e.target.dataset.reuseFrame !== undefined) {
+      rehearsal.reuseFrames ||= {};
+      if (e.target.value) rehearsal.reuseFrames[e.target.dataset.reuseFrame] = e.target.value;
+      else delete rehearsal.reuseFrames[e.target.dataset.reuseFrame];
+      persistWorkshop();
+    }
+  });
+  const localAction = (fn) =>
+    guard(async () => {
+      try {
+        if (restoreBlocked || !workshopReady)
+          throw Error('请先在页面顶部完成草稿恢复，再制作本地预演');
+        await fn();
+      } catch (e) {
+        $('rehearsalMessage').textContent = '本地预演未能继续：' + e.message;
+        throw e;
+      }
+    });
+  $('makeRehearsal').onclick = localAction(async () => {
+    if (dirty || !current) throw Error('请先保存当前剧本');
+    const draft = read(),
+      issues = [
+        ...P.preflight(draft, rehearsal, { requireReviews: false }),
+        ...NightfallIntros.issues(draft),
+      ];
+    if (issues.length) throw Error(issues.join('；'));
+    $('rehearsalMessage').textContent = '正在保存本地预演任务…';
+    showRehearsal(
+      await api(
+        '/api/story-preview-jobs',
+        { storyId: current.id, version: current.version, rehearsal },
+        { timeoutMs: 30000 },
+      ),
+    );
+    notice(
+      rehearsalJob.status === 'running'
+        ? '预演已开始，只使用已有画面与免费语音，不调用付费图片或视频模型。'
+        : rehearsalJob.status === 'paused'
+          ? '已找到上次预演。请查看下方停止原因，点击“继续本地处理”恢复。'
+          : '当前素材的预演已制作完成，可直接播放。',
+    );
+  });
+  $('resumeRehearsal').onclick = localAction(async () => {
+    $('rehearsalMessage').textContent = '正在恢复本地处理…';
+    showRehearsal(
+      await api(
+        '/api/story-preview-jobs/' + rehearsalJob.id,
+        { action: 'resume' },
+        { timeoutMs: 30000 },
+      ),
+    );
+  });
+  $('confirmRehearsal').onclick = localAction(async () => {
+    const issues = P.confirmationIssues(rawDraft(), rehearsal, {
+      job: rehearsalJob,
+      current,
+      dirty,
+      watched: rehearsalWatched,
+      errors: [
+        ...P.preflight(rawDraft(), rehearsal, { requireReviews: false }),
+        ...NightfallIntros.issues(rawDraft()),
+      ],
+    });
+    if (issues.length) throw Error(issues.join('；'));
+    showRehearsal(
+      await api('/api/story-preview-jobs/' + rehearsalJob.id, {
+        action: 'confirm',
+        watched: true,
+        fingerprint: P.fingerprint(read(), rehearsal),
+        rehearsal,
+      }),
+    );
+    notice('已确认当前版本叙事。可复用并重新确认人物、分镜；尚未提交正式生成。');
+  });
+  $('rehearsalVideo').addEventListener('ended', () => {
+    const v = $('rehearsalVideo'),
+      j = rehearsalJob;
+    if (!j?.url || new URL(j.url, location.href).href !== v.currentSrc) return;
+    const ranges = Array.from({ length: v.played.length }, (_, i) => [
+      v.played.start(i),
+      v.played.end(i),
+    ]);
+    rehearsalWatched = P.fullPlayback(ranges, v.duration) || watchedReceipt(j);
+    if (rehearsalWatched) rehearsal.watchedPreview = { id: j.id, fingerprint: j.fingerprint };
+    else notice('尚有未观看片段。请完整观看；跳至结尾不会记录完成。');
+    updateButtons();
+    persistWorkshop();
+  });
+  $('refreshAssets').onclick = guard(loadRehearsals);
+  $('revisionDraft').onclick = guard(async () => {
+    const d = rawDraft();
+    current = null;
+    clearJob();
+    rehearsal.previewId = null;
+    d.title = (d.title.replace(/·连贯修订$/, '') + '·连贯修订').slice(0, 60);
+    d.confirmed = false;
+    d.narrativeMode = 'continuity-v1';
+    dirty = true;
+    render(d);
+    $('library').value = '';
+    await loadRehearsals();
+    notice('已复制为独立修订草稿，原剧本、素材和已采用视频保留。');
+  });
+  $('importOldArt').onclick = guard(async () => {
+    const characters = {},
+      frames = {};
+    document.querySelectorAll('[data-reuse-character]').forEach((el) => {
+      if (el.value) characters[el.dataset.reuseCharacter] = el.value;
+    });
+    document.querySelectorAll('[data-reuse-frame]').forEach((el) => {
+      if (el.value) frames[el.dataset.reuseFrame] = el.value;
+    });
+    if (!current?.id || !current.confirmed || generationDraftChanged())
+      throw Error('请先保存并确认当前剧本版本');
+    if (art) throw Error('当前版本已有图片任务；请建立修订版后再复用，避免覆盖原图片任务');
+    showArt(
+      await api('/api/story-art-import', {
+        storyId: current.id,
+        version: current.version,
+        roomSize,
+        characters,
+        frames,
+      }),
+    );
+    notice('已复制为当前版本的待确认图片。没有生成费用，原任务未改变。');
+  });
+  document.addEventListener('input', (e) => {
+    const el = e.target;
+    if (el.dataset.transitionCheck !== undefined) {
+      const i = +el.dataset.transitionCheck;
+      if (el.checked) rehearsal.reviews[i] = P.transition(rawDraft(), i);
+      else delete rehearsal.reviews[i];
+    } else if (el.dataset.rehearsalAsset !== undefined) {
+      const i = el.dataset.rehearsalAsset;
+      if (el.value) rehearsal.selections[i] = { asset: el.value, start: 0 };
+      else delete rehearsal.selections[i];
+      renderRehearsalImage(el);
+    } else if (el.dataset.rehearsalStart !== undefined || el.dataset.rehearsalEnd !== undefined) {
+      const i = el.dataset.rehearsalStart ?? el.dataset.rehearsalEnd;
+      if (rehearsal.selections[i]) {
+        if (el.dataset.rehearsalStart !== undefined)
+          rehearsal.selections[i].start = Number(el.value);
+        else if (el.value === '') delete rehearsal.selections[i].end;
+        else rehearsal.selections[i].end = Number(el.value);
+      }
+    } else return;
+    if (el.dataset.transitionCheck === undefined) {
+      rehearsalWatched = false;
+      delete rehearsal.watchedPreview;
+    }
+    updateButtons();
+    persistWorkshop();
+  });
+}
+function updateContinuity(d) {
+  document.querySelectorAll('.continuity-pair').forEach((el) => {
+    const i = Number(el.closest('.scene').id.replace('shot-', '')),
+      prev = d.scenes[i - 1],
+      now = d.scenes[i];
+    const parts = el.querySelectorAll('p');
+    parts[0].textContent = prev.endFrame || '未填结束画面';
+    parts[1].textContent = now.startFrame || '未填起始画面';
+    const small = el.querySelectorAll('small');
+    small[1].textContent =
+      '出场 ' +
+      (prev.cast || []).join('、') +
+      ' · ' +
+      (prev.dialogues || []).map((x) => x.seat + '号：' + x.text).join(' / ');
+    small[3].textContent =
+      '出场 ' +
+      (now.cast || []).join('、') +
+      ' · ' +
+      now.description +
+      ' · ' +
+      (now.dialogues || []).map((x) => x.seat + '号：' + x.text).join(' / ');
+  });
+}

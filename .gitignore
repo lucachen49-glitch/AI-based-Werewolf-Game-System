@@ -25,6 +25,6 @@ logs/
 /full-test-tap-final.txt
 /test-current.txt
 /test-output*.txt
-/({c
-/({i
+/([{}]c
+/([{}]i
 /[[]c.seat
