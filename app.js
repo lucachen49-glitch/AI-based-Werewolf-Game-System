@@ -114,7 +114,8 @@ const phaseLabels = {
   night: '夜晚 · 秘密行动',
   discussion: '白天 · 轮流发言',
   voting: '白天 · 公开投票',
-  hunter: '技能 · 猎人开枪',
+  hunter: '出局结算',
+  lastWords: '出局遗言',
   ended: '终局 · 身份揭晓',
 };
 

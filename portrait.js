@@ -22,28 +22,31 @@ function renderPortraitAPIStatus(title, detail) {
         ),
       )
     : 0;
-  const text = voting
-    ? '投票 · 已收 ' +
-      voting.received +
-      '/' +
-      voting.total +
-      ' 票 · ' +
-      Math.floor((Date.now() - voting.startedAt) / 1000) +
-      '秒' +
-      (voting.failed.length ? ' · 待重试' : paused ? ' · 已暂停' : '')
-    : current
-      ? (publicNight() ? '夜间行动' : current.id + 1 + '号') +
-        ' · ' +
-        (apiWaiting
-          ? '已暂停，等待手动重试'
-          : preparation
-            ? preparation.status === 'ready'
-              ? '下一位已就绪'
-              : preparation.status === 'failed'
-                ? '准备未完成，轮到时处理'
-                : '准备下一位 ' + elapsed + '秒'
-            : '等待接口 ' + elapsed + '秒' + (paused ? ' · 已暂停' : ''))
-      : '接口等待：无';
+  const text =
+    voting?.batch.kind === 'night' && publicNight()
+      ? '夜间秘密行动处理中'
+      : voting
+        ? (voting.batch.kind === 'night' ? '狼队选择 · 已收 ' : '投票 · 已收 ') +
+          voting.received +
+          '/' +
+          voting.total +
+          ' 票 · ' +
+          Math.floor((Date.now() - voting.startedAt) / 1000) +
+          '秒' +
+          (voting.failed.length ? ' · 待重试' : paused ? ' · 已暂停' : '')
+        : current
+          ? (publicNight() ? '夜间行动' : current.id + 1 + '号') +
+            ' · ' +
+            (apiWaiting
+              ? '已暂停，等待手动重试'
+              : preparation
+                ? preparation.status === 'ready'
+                  ? '下一位已就绪'
+                  : preparation.status === 'failed'
+                    ? '准备未完成，轮到时处理'
+                    : '准备下一位 ' + elapsed + '秒'
+                : '等待接口 ' + elapsed + '秒' + (paused ? ' · 已暂停' : ''))
+          : '接口等待：无';
   const status = $('portraitAPIStatus');
   if (status.textContent !== text) status.textContent = text;
   status.setAttribute('title', text);
@@ -79,7 +82,7 @@ function portraitMove(node, parent, before = null) {
 function portraitFocus() {
   if (speechBubble && ['dialogue', 'replay'].includes(speechBubble.kind)) return speechBubble.id;
   return activeSeat !== null &&
-    (game.phase === 'discussion' ||
+    (['discussion', 'lastWords'].includes(game.phase) ||
       (game.pk?.includes(activeSeat) && actionText.includes('PK 发言')))
     ? activeSeat
     : null;
@@ -363,7 +366,8 @@ function renderPortrait() {
       night: ['☾', '烛火将熄 · 请闭上眼', '夜幕降临'],
       discussion: ['❖', '线索藏在每句话里', '白昼议事'],
       voting: ['⚖', '每一票，皆是选择', '公开投票'],
-      hunter: ['⌖', '最后的选择', '技能结算'],
+      hunter: ['✦', '正在结算出局情况', '出局结算'],
+      lastWords: ['❖', '最后的陈述', '出局遗言'],
       ended: [game.winner === '狼人' ? '☾' : '☀', '尘埃落定 · 身份揭晓', game.winner + '阵营胜利'],
     };
     const [symbol, kicker, title] = titles[game.phase] || titles.lobby;

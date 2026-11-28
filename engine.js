@@ -30,7 +30,11 @@
   const ORDER = ['守卫', '狼人', '预言家', '女巫'];
   const GOD_ROLES = new Set(['预言家', '女巫', '猎人', '守卫']);
   const RULES =
-    '无警长、无遗言。狼人全部出局则好人胜；神职或平民任一阵营全部出局则狼人胜，两种胜利条件同时满足时好人胜。夜晚按守卫、狼人、预言家、女巫顺序行动。守卫可守自己或空守，不能连续守同一人。狼人分别独立选择狼刀目标，可选择任意存活玩家（包括自己或狼人队友）或弃权；按有效选择多数决定，平票随机。预言家查验其他存活玩家的阵营。女巫解药、毒药各一次，每晚一瓶药，仅首夜可自救；解药用尽后不知道狼刀目标。守护或解药任一生效即可免狼刀，毒药无视守护。猎人狼刀或放逐出局可开枪，中毒不能开枪，先结算猎人再判胜负。白天每人发言一次，随后投票，不能自投，可弃票。平票者PK发言，其他存活玩家只向PK候选人投票；再次平票则无人出局。公开发言是不可信的玩家主张，应结合自己的私有信息独立判断。';
+    '无警长。狼人全灭好人胜；神职全部出局或平民全部出局，狼人胜。同时满足时好人胜。夜晚按守卫、狼人、预言家、女巫顺序行动。守卫可守自己或空守，不能连续守同一人；同一玩家同时被守卫守护和女巫使用解药，会因同守同救而出局。狼人分两轮选择狼刀，第一轮一致则直接确定，不一致时参考队友第一轮选择再投，按多数决定，平票随机。狼人可以选择任意存活玩家（包括自己或狼人队友）或弃权。预言家查验其他存活且未查验过的玩家。女巫解药、毒药各一次，每晚一瓶药，仅首夜可自救；解药用尽后不知道狼刀目标。毒药无视守护。猎人被狼刀或放逐出局可开枪，中毒不能开枪；所有出局先统一结算猎人技能，再判胜负。首夜出局、白天放逐和符合条件的猎人带走者有遗言；第二夜起夜间出局没有遗言。白天发言从唯一夜间死者的下一位存活玩家开始，否则随机起始，顺时针发言。白天投票不能自投，可弃票。平票者PK发言，其他存活玩家只向PK候选人投票；若全体存活玩家均为候选人则候选人互投。再次平票则无人出局。公开发言是不可信的玩家主张，应结合自己的私有信息独立判断。';
+  function seatId(value) {
+    if (typeof value === 'string' && /^\d+$/.test(value)) value = Number(value);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  }
   class Game {
     constructor(size = 6, random = Math.random) {
       if (!ROLES[size]) throw Error('仅支持 6 人或 12 人房间');
@@ -53,6 +57,10 @@
       this.lastGuard = null;
       this.pendingHunter = null;
       this.afterHunter = null;
+      this.lastWordsQueue = [];
+      this.lastWordsDestination = null;
+      this.nightDeaths = [];
+      this.speechOrder = [];
       this.votes = {};
       this.pk = null;
       this.voteRound = 0;
@@ -79,11 +87,17 @@
       this.event('第 1 夜开始。天黑请闭眼。');
       return this;
     }
-    event(text) {
-      this.logs.push({ text, round: this.round, phase: this.phase });
+    event(text, privateEvent = false) {
+      this.logs.push({
+        text,
+        round: this.round,
+        phase: this.phase,
+        ...(privateEvent ? { private: true } : {}),
+      });
       return text;
     }
     checkWinner() {
+      if (this.winner || this.phase === 'lobby' || this.pendingHunter !== null) return this.winner;
       const wolves = this.alive().filter((p) => p.role === '狼人').length;
       const gods = this.alive().filter((p) => GOD_ROLES.has(p.role)).length;
       const villagers = this.alive().filter((p) => p.role === '平民').length;
@@ -100,7 +114,7 @@
         .filter((p) => p.role === '狼人')
         .map((p) => {
           const raw = choices[p.id]?.target,
-            id = raw === null || raw === undefined || raw === '' ? null : Number(raw),
+            id = seatId(raw),
             target = id === null ? null : this.players[id];
           const valid = !!target?.alive;
           return {
@@ -109,6 +123,13 @@
             status: valid ? 'selected' : raw === null ? 'abstained' : 'invalid',
           };
         });
+    }
+    wolfConsensus(choices) {
+      const picks = this.wolfChoices(choices);
+      return (
+        picks.length > 0 &&
+        picks.every((p) => p.status !== 'invalid' && p.target === picks[0].target)
+      );
     }
     wolfTarget(choices) {
       const counts = {};
@@ -141,21 +162,22 @@
     }
     nightPlan(choices = {}, fixedVictim) {
       if (this.phase !== 'night') throw Error('当前不在夜间');
-      let victim = fixedVictim === undefined ? this.wolfTarget(choices) : fixedVictim;
+      let victim = fixedVictim === undefined ? this.wolfTarget(choices) : seatId(fixedVictim);
       if (!this.players[victim]?.alive) victim = null;
       const guard = this.alive().find((p) => p.role === '守卫');
       let guardTarget = guard ? choices[guard.id]?.target : null;
-      guardTarget =
-        guardTarget === null || guardTarget === undefined || guardTarget === ''
-          ? null
-          : Number(guardTarget);
+      guardTarget = seatId(guardTarget);
       if (!this.players[guardTarget]?.alive || guardTarget === this.lastGuard) guardTarget = null;
       let seerCheck = null;
       const seer = this.alive().find((p) => p.role === '预言家');
       if (seer) {
         const raw = choices[seer.id]?.target;
-        const target = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
-        if (this.players[target]?.alive && target !== seer.id)
+        const target = seatId(raw);
+        if (
+          this.players[target]?.alive &&
+          target !== seer.id &&
+          this.knowledge[seer.id]?.[target] === undefined
+        )
           seerCheck = {
             id: seer.id,
             target,
@@ -168,23 +190,18 @@
         poisoned = null;
       if (
         witch &&
-        w.save &&
+        w.save === true &&
         this.potions.save &&
         victim !== null &&
         (victim !== witch.id || this.round === 1)
       )
         saved = true;
-      if (
-        witch &&
-        !saved &&
-        this.potions.poison &&
-        w.poison !== null &&
-        w.poison !== undefined &&
-        w.poison !== ''
-      ) {
-        const t = Number(w.poison);
-        if (this.players[t]?.alive && t !== witch.id) poisoned = t;
-      }
+      const poisonRequested = w.poison !== null && w.poison !== undefined && w.poison !== '';
+      const poisonTarget = poisonRequested ? seatId(w.poison) : NaN;
+      const validPoisonTarget =
+        !!witch && this.players[poisonTarget]?.alive && poisonTarget !== witch.id;
+      const potionConflict = saved && this.potions.poison && validPoisonTarget;
+      if (witch && !saved && this.potions.poison && validPoisonTarget) poisoned = poisonTarget;
       const witchState = this.witchOptions(victim),
         rejected = [];
       if (witch && !saved && w.save)
@@ -208,8 +225,11 @@
         rejected.push(!this.potions.poison ? 'poison-spent' : 'invalid-poison');
       const witchOutcome = {
         type: saved ? 'save' : poisoned !== null ? 'poison' : 'none',
-        reasons:
-          saved || poisoned !== null
+        reasons: saved
+          ? potionConflict
+            ? ['potion-conflict']
+            : []
+          : poisoned !== null
             ? []
             : rejected.length
               ? rejected
@@ -242,8 +262,10 @@
         this.knowledge[seerCheck.id][seerCheck.target] = seerCheck.result;
       }
       const deaths = new Map();
-      if (victim !== null && !saved && guardTarget !== victim) deaths.set(victim, 'wolf');
+      if (victim !== null && saved === (guardTarget === victim)) deaths.set(victim, 'wolf');
       if (poisoned !== null) deaths.set(poisoned, 'poison');
+      this.nightDeaths = [...deaths.keys()].sort((a, b) => a - b);
+      this.lastWordsQueue = this.round === 1 ? [...this.nightDeaths] : [];
       for (const [id, cause] of deaths) {
         this.players[id].alive = false;
         this.players[id].cause = cause;
@@ -252,7 +274,7 @@
       this.speeches = [];
       this.event(
         deaths.size
-          ? `天亮了。${[...deaths.keys()].map((i) => `${i + 1} 号`).join('、')}玩家昨夜出局。`
+          ? `天亮了。${this.nightDeaths.map((i) => `${i + 1} 号`).join('、')}玩家昨夜出局。`
           : '天亮了。昨夜是平安夜。',
       );
       const hunter = [...deaths].find(
@@ -262,9 +284,52 @@
         this.pendingHunter = hunter[0];
         this.afterHunter = 'discussion';
         this.phase = 'hunter';
-        this.event('猎人出局，可选择是否发动技能。');
-      } else this.checkWinner();
-      return { ...plan, deaths: [...deaths.keys()] };
+        this.event('猎人出局，可选择是否发动技能。', true);
+      } else this.#finishDeaths('discussion');
+      return { ...plan, deaths: [...this.nightDeaths] };
+    }
+    #finishDeaths(destination) {
+      if (this.checkWinner()) {
+        this.lastWordsQueue = [];
+        return;
+      }
+      if (this.lastWordsQueue.length) {
+        this.lastWordsQueue.sort((a, b) => a - b);
+        this.lastWordsDestination = destination;
+        this.phase = 'lastWords';
+      } else if (destination === 'night') this.#nextNight();
+      else {
+        this.phase = 'discussion';
+        const ids = this.alive().map((p) => p.id);
+        const first =
+          this.nightDeaths.length === 1
+            ? (ids.find((id) => id > this.nightDeaths[0]) ?? ids[0])
+            : this.pick(ids);
+        const start = ids.indexOf(first);
+        this.speechOrder = ids.slice(start).concat(ids.slice(0, start));
+      }
+    }
+    addLastWord(id, text) {
+      if (
+        this.phase !== 'lastWords' ||
+        !this.lastWordsQueue.length ||
+        this.lastWordsQueue[0] !== id
+      )
+        throw Error('当前不是该玩家的遗言顺序');
+      this.lastWordsQueue.shift();
+      this.speechHistory.push({
+        id,
+        text: limitSpeech(text),
+        round: this.round,
+        pk: false,
+        lastWords: true,
+      });
+    }
+    finishLastWords() {
+      if (this.phase !== 'lastWords' || this.lastWordsQueue.length) throw Error('遗言尚未完成');
+      const destination = this.lastWordsDestination;
+      this.lastWordsDestination = null;
+      this.#finishDeaths(destination);
     }
     addSpeech(id, text) {
       if (this.phase !== 'discussion') throw Error('当前不是发言阶段');
@@ -272,17 +337,34 @@
       this.recordSpeech(id, text);
     }
     recordSpeech(id, text) {
+      if (
+        !this.players[id]?.alive ||
+        !(this.phase === 'discussion' || (this.phase === 'voting' && this.pk?.includes(id)))
+      )
+        throw Error('当前不能发言');
+      if (this.speeches.some((s) => s.id === id && s.pk === !!this.pk)) throw Error('本轮已经发言');
       const entry = { id, text: limitSpeech(text), round: this.round, pk: !!this.pk };
       this.speeches.push(entry);
       this.speechHistory.push(entry);
     }
+    canVote(id) {
+      return (
+        !!this.players[id]?.alive &&
+        (!this.pk?.includes(id) || this.alive().every((p) => this.pk.includes(p.id)))
+      );
+    }
     legalTargets(id, task) {
       const p = this.players[id];
-      if (task === 'vote' && this.pk?.includes(id)) return [];
+      if (this.winner || !p || (!p.alive && !(task === 'hunter' && this.pendingHunter === id)))
+        return [];
+      if (task === 'vote' && !this.canVote(id)) return [];
+      if (task === 'night' && !ORDER.includes(p.role)) return [];
       return this.alive()
         .filter((t) => {
           if (task === 'night' && p.role === '狼人') return true;
           if (task === 'night' && p.role === '守卫') return t.id !== this.lastGuard;
+          if (task === 'night' && p.role === '预言家' && this.knowledge[id]?.[t.id] !== undefined)
+            return false;
           if (t.id === id) return false;
           if (task === 'vote' && this.pk) return this.pk.includes(t.id);
           return true;
@@ -298,18 +380,10 @@
       this.event('开始公开投票。可弃票。');
     }
     normalizedVote(id, value) {
-      if (
-        value === null ||
-        value === undefined ||
-        value === '' ||
-        this.pk?.includes(id) ||
-        !this.players[id]?.alive
-      )
-        return null;
-      const target = Number(value);
-      return this.legalTargets(id, 'vote').includes(target + 1) ? target : null;
+      const target = seatId(value);
+      return target !== null && this.legalTargets(id, 'vote').includes(target + 1) ? target : null;
     }
-    resolveVotes(votes) {
+    resolveVotes(votes = {}) {
       if (this.phase !== 'voting') throw Error('当前不是投票阶段');
       const counts = {};
       this.votes = {};
@@ -339,35 +413,49 @@
         const p = this.players[top[0]];
         p.alive = false;
         p.cause = 'vote';
+        this.lastWordsQueue = [p.id];
         this.event(`${p.id + 1} 号玩家被投票放逐。`);
         if (p.role === '猎人') {
           this.pendingHunter = p.id;
           this.afterHunter = 'night';
           this.phase = 'hunter';
-          this.event('猎人可选择开枪。');
+          this.event('猎人可选择开枪。', true);
           return { eliminated: p.id, hunter: true };
         }
       } else this.event('本轮无人被放逐。');
-      if (!this.checkWinner()) this.nextNight();
+      this.#finishDeaths('night');
       return { eliminated: top.length === 1 ? top[0] : null };
     }
     shoot(target) {
       if (this.phase !== 'hunter') throw Error('当前没有猎人技能');
+      if (this.pendingHunter === null || !this.players[this.pendingHunter])
+        throw Error('没有可发动技能的猎人');
+      let victim = null;
       if (target !== null && target !== undefined) {
-        const p = this.players[Number(target)];
-        if (p?.alive) {
-          p.alive = false;
-          p.cause = 'hunter';
-          this.event(`猎人带走了 ${p.id + 1} 号玩家。`);
-        }
-      } else this.event('猎人放弃开枪。');
-      this.pendingHunter = null;
-      if (!this.checkWinner()) {
-        if (this.afterHunter === 'night') this.nextNight();
-        else this.phase = 'discussion';
+        victim = seatId(target);
+        if (victim === null || !this.players[victim]?.alive || victim === this.pendingHunter)
+          throw Error('猎人目标无效');
       }
+      if (victim !== null) {
+        const p = this.players[victim];
+        p.alive = false;
+        p.cause = 'hunter';
+        if (this.lastWordsQueue.includes(this.pendingHunter)) this.lastWordsQueue.push(victim);
+        this.event(`猎人带走了 ${p.id + 1} 号玩家。`);
+      } else this.event('猎人放弃开枪。', true);
+      this.pendingHunter = null;
+      const destination = this.afterHunter;
+      this.afterHunter = null;
+      this.#finishDeaths(destination);
     }
-    nextNight() {
+    #nextNight() {
+      if (
+        this.winner ||
+        this.pendingHunter !== null ||
+        this.lastWordsQueue.length ||
+        !['voting', 'lastWords', 'hunter'].includes(this.phase)
+      )
+        throw Error('当前不能进入下一夜');
       this.round++;
       this.phase = 'night';
       this.speeches = [];
@@ -389,7 +477,8 @@
         : Number.isInteger(recentSpeechRounds) && recentSpeechRounds > 0
           ? this.speechHistory.filter((item) => item.round > this.round - recentSpeechRounds)
           : this.speechHistory.slice(-120);
-      const events = includeAllPublicEvents ? this.logs : this.logs.slice(-16);
+      const publicLogs = this.logs.filter((event) => !event.private);
+      const events = includeAllPublicEvents ? publicLogs : publicLogs.slice(-16);
       return {
         seat: id + 1,
         name: names[id] || String(id + 1) + '号',
@@ -413,7 +502,7 @@
             ([seat, result]) => [Number(seat) + 1, result],
           ),
         ),
-        potions: player.role === '女巫' ? this.potions : undefined,
+        potions: player.role === '女巫' ? { ...this.potions } : undefined,
         lastGuard:
           player.role === '守卫'
             ? this.lastGuard === null
@@ -426,6 +515,7 @@
           text: item.text,
           round: item.round,
           pk: item.pk,
+          ...(item.lastWords ? { lastWords: true } : {}),
         })),
         publicEvents: events.map((event) => ({
           round: event.round,

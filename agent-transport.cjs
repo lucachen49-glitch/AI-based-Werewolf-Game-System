@@ -2,12 +2,13 @@
 const http = require('node:http');
 const https = require('node:https');
 const { Readable } = require('node:stream');
+const { connectionOptions } = require('./upstream-guard.cjs');
 
 // Game actions wait for the provider until cancellation or a connection error.
 // A dedicated socket avoids the response deadlines in the shared fetch client.
 function requestAgent(
   endpoint,
-  { method = 'POST', headers = {}, body = '', signal, timeoutMs = 0 },
+  { method = 'POST', headers = {}, body = '', signal, timeoutMs = 0, allowLoopback, lookup },
 ) {
   return new Promise((resolve, reject) => {
     const url = new URL(endpoint);
@@ -15,6 +16,7 @@ function requestAgent(
     const request = transport.request(
       url,
       {
+        ...connectionOptions(url, { allowLoopback, lookup }),
         method,
         headers: { ...headers, 'Content-Length': Buffer.byteLength(body) },
         agent: false,
@@ -23,7 +25,7 @@ function requestAgent(
       },
       (response) => {
         if (response.statusCode >= 300 && response.statusCode < 400) {
-          response.resume();
+          response.destroy();
           reject(Object.assign(Error('Agent endpoint redirected'), { code: 'ERR_AGENT_REDIRECT' }));
           return;
         }
@@ -40,6 +42,12 @@ function requestAgent(
     );
     request.on('socket', (socket) => socket.setTimeout(timeoutMs));
     request.on('error', reject);
+    request.on('upgrade', (_response, socket) => {
+      socket.destroy();
+      reject(
+        Object.assign(Error('Agent protocol upgrade refused'), { code: 'ERR_UPSTREAM_UPGRADE' }),
+      );
+    });
     request.end(body);
   });
 }

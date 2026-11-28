@@ -1,0 +1,78 @@
+'use strict';
+const APP_SCRIPTS = require('./app-manifest.cjs');
+const allowed = new Set([
+  'index.html',
+  'styles.css',
+  'limits.js',
+  ...APP_SCRIPTS,
+  'engine.js',
+  'voices.js',
+  'observer.js',
+  'spectator.js',
+  'assets/rules-6.mp3',
+  'assets/rules-12.mp3',
+  'image-settings.html',
+  'image-settings.css',
+  'image-settings.js',
+  'manor.js',
+  'manor.css',
+  'manor-twelve.css',
+  'theme.css',
+  'soundfx.js',
+  'assets/music/manor-nocturne.ogg',
+  'assets/sfx/wolf-howl-v3.wav',
+  ...require('./soundfx.js').names.map((n) => 'assets/sfx/' + n + '.wav'),
+  ...[
+    'manor-room',
+    'manor-table',
+    ...Array.from({ length: 12 }, (_, i) => 'portrait-' + String(i + 1).padStart(2, '0')).flatMap(
+      (id) => [id, id + '-thumb', id + '-closed'],
+    ),
+  ].map((id) => 'assets/manor/' + id + '.webp'),
+]);
+const types = {
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mp3': 'audio/mpeg',
+  '.webp': 'image/webp',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+};
+allowed.add('assets/sfx/wolf-attack-v4.wav');
+for (const name of require('./soundfx.js').names) allowed.add(require('./soundfx.js').source(name));
+Object.values(require('./soundfx.js').musicTracks).forEach((file) => allowed.add(file));
+[
+  'avatar.js',
+  'agent-request.js',
+  'workshop-auto-ui.js',
+  'workshop-auto.css',
+  'recording-surface.js',
+  'story-subtitle-ui.js',
+  'recording.js',
+  'recording.css',
+  'portrait.js',
+  'portrait.css',
+  'api-wait.js',
+  'fullscreen.css',
+  'character-intros.js',
+  'character-intro-ui.js',
+  'character-intro.css',
+  'scenario.js',
+  'scenario-samples.js',
+  'scenario-organizer.js',
+  'scenario-references.js',
+  'story-player.js',
+  'story-game.js',
+  'story.css',
+  'scenario-settings.html',
+  'scenario-settings.css',
+  'scenario-settings.js',
+  'scenario-review-ui.js',
+  'story-art-ui.js',
+  'workshop-state.js',
+  'workshop-flow.js',
+  'workshop-preview.js',
+  'workshop-preview-ui.js',
+].forEach((f) => allowed.add(f));
+module.exports = { allowed, types };

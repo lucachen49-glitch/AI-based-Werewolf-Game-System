@@ -889,7 +889,7 @@ test('前端行动校验可关联安全日志，日志文件不对网页开放',
     assert.equal((await fetch(base + '/' + name)).status, 404);
 });
 
-test('请求日志文件记录关联时间和结束原因，舍弃正文、身份和凭据', (t) => {
+test('请求日志文件记录关联时间和结束原因，舍弃正文、身份和凭据', async (t) => {
   const fs = require('node:fs'),
     os = require('node:os'),
     path = require('node:path');
@@ -918,6 +918,7 @@ test('请求日志文件记录关联时间和结束原因，舍弃正文、身�
     code: 'UPSTREAM_TIMEOUT',
     body: 'PRIVATE',
   });
+  await log.flush();
   const text = fs.readFileSync(file, 'utf8'),
     rows = text.trim().split('\n').map(JSON.parse);
   assert.equal(rows.length, 2);
@@ -1309,6 +1310,7 @@ test('投票请求日志记录实际上下文和最终回复并脱敏凭据', as
   });
   assert.equal(response.status, 200);
   assert.equal(seen[0].body.text.format.name, 'werewolf_vote');
+  await logger.flush();
   const entries = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
   const received = entries.find((entry) => entry.event === 'response_received');
   assert.equal(received.requestId, 'vote-context-log');
@@ -1363,6 +1365,7 @@ test('夜间请求日志保留有权限的私有上下文及最终回复并脱�
   });
   assert.equal(response.status, 200);
   assert.equal(seen[0].body.text.format.name, 'werewolf_night_witch');
+  await logger.flush();
   const entries = fs.readFileSync(file, 'utf8').trim().split('\n').map(JSON.parse);
   const received = entries.find((entry) => entry.event === 'response_received');
   assert.equal(received.requestId, 'night-context-log');
@@ -1721,7 +1724,8 @@ test('行动校验诊断经真实接口写入文件，保存具体规则并过�
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nightfall-validation-log-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const file = path.join(dir, 'agent-requests.jsonl');
-  const { base } = await fixture(t, { agentLogger: createAgentLogger({ file }) });
+  const logger = createAgentLogger({ file });
+  const { base } = await fixture(t, { agentLogger: logger });
   const diagnostic = {
     version: 1,
     rule: 'TARGET_NOT_ALLOWED',
@@ -1765,6 +1769,7 @@ test('行动校验诊断经真实接口写入文件，保存具体规则并过�
   });
   assert.equal(response.status, 200);
   assert.equal((await response.json()).saved, true);
+  await logger.flush();
   const text = fs.readFileSync(file, 'utf8'),
     entry = JSON.parse(text);
   assert.equal(entry.requestId, 'detailed-validation-1');
@@ -1869,6 +1874,7 @@ test('每局 Agent 请求与安全上下文分别保存，可独立下载', asyn
     requestContext: [{ role: 'user', content: '第二局独立上下文' }],
     assistantResponse: '{"save":false,"poison":null}',
   });
+  await log.flush();
   const first = fs.readFileSync(
     path.join(directory, 'logs', 'agent-games', 'game-one.jsonl'),
     'utf8',

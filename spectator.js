@@ -355,7 +355,7 @@ function animateEvent(event, token) {
   if (!sceneTitles[event.kind] || (event.private && spectatorPrefs.perspective !== 'god'))
     return Promise.resolve();
   const version = ++motionVersion;
-  nightFocus = event.private ? event : null;
+  nightFocus = event.private && event.actors ? event : null;
   sceneMotion = { kind: event.kind, event };
   renderPlayers();
   renderSceneMotion();
@@ -528,7 +528,7 @@ function saveSpectatorPrefs() {
   } catch {}
 }
 function publicNight() {
-  return spectatorPrefs.perspective === 'public' && game.phase === 'night';
+  return spectatorPrefs.perspective === 'public' && ['night', 'hunter'].includes(game.phase);
 }
 function observerText(event) {
   return NightfallObserver.project(event, spectatorPrefs.perspective);
@@ -1000,9 +1000,14 @@ function spectatorExport() {
     perspective: spectatorPrefs.perspective,
     mode: BOARDS[size].title,
     round: game.round,
-    phase: game.phase,
+    phase:
+      game.phase === 'hunter' && spectatorPrefs.perspective === 'public'
+        ? 'settlement'
+        : game.phase,
     winner: game.winner,
-    log: game.logs.map((l) => l.text),
+    log: game.logs
+      .filter((l) => !l.private || spectatorPrefs.perspective === 'god')
+      .map((l) => l.text),
     speeches: transcript.map((t) => ({ ...t, name: name(t.id) })),
     commentary: visibleObserverEvents().map((e) => ({
       round: e.round,

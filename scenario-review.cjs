@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const AgentRequest = require('./agent-request.js');
 const Limits = require('./limits.js');
 const fs = require('node:fs/promises'),
@@ -111,7 +112,7 @@ function parseReport(text, secrets = []) {
 function createScenarioReviews({
   root = path.join(dataRoot, 'reviews'),
   store,
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   validateChat,
   normalizeEndpoint,
   readUpstream,

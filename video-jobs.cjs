@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const fs = require('node:fs/promises'),
   path = require('node:path'),
   { randomUUID, createHash } = require('node:crypto');
@@ -85,7 +86,7 @@ function createVideoJobs({
   config,
   artJobs,
   references,
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   media = mediaTools,
   pollMs = 5000,
   maxWaitMs = 15 * 60 * 1000,

@@ -467,6 +467,18 @@ test('夜间 Responses Schema 按角色限制行动字段与可选目标', () =>
     allowedTargets: [2, 3],
   });
   assert.equal(seer.text.format.name, 'werewolf_night_seer');
+  const saveAvailable = Agent.responsesBody({
+    model: 'm',
+    messages,
+    actionTask: 'night',
+    actionRole: '女巫',
+    allowedTargets: [2, 3],
+    nightOptions: { canSave: true, poisonAvailable: true },
+  });
+  assert.deepEqual(saveAvailable.text.format.schema.properties.save, {
+    type: 'boolean',
+    enum: [false, true],
+  });
   const witch = Agent.responsesBody({
     model: 'm',
     messages,

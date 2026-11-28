@@ -75,7 +75,7 @@ function protectSecret(value, decrypt = false) {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (data) => {
       output += data;
-      if (output.length > 65536) {
+      if (output.length > Math.max(65536, Buffer.byteLength(value, 'utf8') * 2 + 8192)) {
         child.kill();
         finish(true);
       }

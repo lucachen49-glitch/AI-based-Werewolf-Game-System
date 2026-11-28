@@ -50,9 +50,9 @@ test('六与十二人女巫用药前条件、未生效原因与最终结算一�
       assert.match(cue.godText, kind === 'self' ? /今晚不能自救/ : /首夜/);
       if (kind === 'save') {
         assert.equal(plan.saved, true);
-        assert.equal(g.players[target].alive, true);
+        assert.equal(g.players[target].alive, size === 6);
         assert.match(e.godText, new RegExp(`${w + 1} 号女巫对 ${target + 1} 号 使用解药`));
-        assert.match(e.godText, /抵挡本夜的狼刀/);
+        assert.match(e.godText, size === 12 ? /同守同救/ : /抵挡本夜的狼刀/);
       } else if (kind === 'poison') {
         assert.equal(plan.poisoned, target);
         assert.equal(g.players[target].cause, 'poison');
@@ -128,7 +128,7 @@ test('夜间展示计划无副作用，固定狼刀不再次随机且与结算�
   for (const key of Object.keys(plan)) assert.deepEqual(result[key], plan[key]);
   assert.equal(result.saved, true);
   assert.equal(result.poisoned, null);
-  assert.deepEqual(result.deaths, []);
+  assert.deepEqual(result.deaths, [6]);
 });
 
 test('夜间无效目标与药水限制在展示和结算采用相同规则', () => {
@@ -264,6 +264,24 @@ test('女巫解药只用一次，且每晚不得同时用毒', () => {
   assert.equal(result.saved, false);
   assert.equal(g.players[5].alive, false);
 });
+test('女巫同时选择救人与投毒时明确记录冲突，仅消耗解药且私密说明原因', () => {
+  const O = require('./observer.js');
+  const g = fixed(6);
+  const plan = g.nightPlan({ 3: { save: true, poison: 0 } }, 4);
+  assert.equal(plan.saved, true);
+  assert.equal(plan.poisoned, null);
+  assert.deepEqual(plan.witchOutcome.reasons, ['potion-conflict']);
+  const event = O.nightAction('女巫', plan, [3]);
+  assert.equal(O.project(event, 'public'), '');
+  assert.match(event.godText, /每晚最多使用一瓶/);
+  const result = g.resolveNight({ 3: { save: true, poison: 0 } }, 4);
+  assert.deepEqual(result.witchOutcome, plan.witchOutcome);
+  assert.equal(g.potions.save, false);
+  assert.equal(g.potions.poison, true);
+  assert.equal(g.players[0].alive, true);
+  assert.equal(g.players[4].alive, true);
+});
+
 test('女巫仅首夜可自救', () => {
   for (const round of [1, 2]) {
     const g = fixed();
@@ -301,12 +319,32 @@ test('猎人被狼刀可开枪，中毒不能开枪', () => {
   assert.equal(g.phase, 'hunter');
   g.shoot(0);
   assert.equal(g.players[0].alive, false);
-  assert.equal(g.phase, 'discussion');
+  assert.equal(g.phase, 'lastWords');
   const poisoned = fixed(12);
   poisoned.resolveNight({ 5: { poison: 6 } });
   assert.equal(poisoned.pendingHunter, null);
-  assert.equal(poisoned.phase, 'discussion');
+  assert.equal(poisoned.phase, 'lastWords');
 });
+test('猎人拒绝空字符串及非法、已出局和自射目标，状态保持待处理', () => {
+  for (const target of ['', ' ', 'abc', false, true, [], {}, NaN, 1.5, -1, 99, 5]) {
+    const g = fixed(12);
+    g.resolveNight({ 0: { target: 6 }, 1: { target: 6 }, 2: { target: 6 }, 3: { target: 6 } });
+    g.players[5].alive = false;
+    assert.equal(g.phase, 'hunter');
+    const before = JSON.stringify(g);
+    assert.throws(() => g.shoot(target), /猎人目标无效/);
+    assert.equal(JSON.stringify(g), before);
+  }
+  const g = fixed(12);
+  g.resolveNight({ 0: { target: 6 }, 1: { target: 6 }, 2: { target: 6 }, 3: { target: 6 } });
+  assert.throws(() => g.shoot(6), /猎人目标无效/);
+  assert.equal(g.phase, 'hunter');
+  assert.equal(g.pendingHunter, 6);
+  assert.equal(g.players[6].alive, false);
+  assert.equal(g.shoot(null), undefined);
+  assert.equal(g.phase, 'lastWords');
+});
+
 test('首轮平票 PK、二轮平票无人出局，PK 候选人不能投票', () => {
   const g = fixed();
   g.phase = 'discussion';
@@ -360,6 +398,9 @@ test('随机全 AI 对局在 6/12 人下能完成并保持状态一致', () => {
             if (p.role === '女巫') choices[p.id] = { save: g.potions.save, poison: null };
           }
           g.resolveNight(choices);
+        } else if (g.phase === 'lastWords') {
+          for (const id of [...g.lastWordsQueue]) g.addLastWord(id, '遗言');
+          g.finishLastWords();
         } else if (g.phase === 'discussion') g.openVoting();
         else if (g.phase === 'voting') {
           const votes = {};
@@ -402,4 +443,85 @@ test('Agent 上下文不暴露全员身份表，并仅提供角色有权知道�
   assert.deepEqual(g.context(4).checks, { 1: '狼人' });
   assert.deepEqual(g.context(5).potions, { save: false, poison: true });
   assert.equal(g.context(7).lastGuard, 3);
+});
+
+test('同夜双死先结算猎人，遗言按座位且仅一次，后续夜死没有遗言', () => {
+  for (const round of [1, 2]) {
+    const g = fixed(12);
+    g.round = round;
+    const result = g.resolveNight({ 5: { poison: 1 } }, 6);
+    assert.deepEqual(result.deaths, [1, 6]);
+    assert.equal(g.checkWinner(), null);
+    assert.throws(() => g.resolveNight({}, 0));
+    g.shoot(8);
+    assert.equal(g.afterHunter, null);
+    assert.equal(g.pendingHunter, null);
+    assert.throws(() => g.shoot(9));
+    if (round === 1) {
+      assert.deepEqual(g.lastWordsQueue, [1, 6, 8]);
+      assert.throws(() => g.addLastWord(8, '抢先'));
+      assert.throws(() => g.finishLastWords());
+      for (const id of [1, 6, 8]) {
+        g.addLastWord(id, '遗言');
+        assert.throws(() => g.addLastWord(id, '重复'));
+      }
+      g.finishLastWords();
+      assert.equal(g.context(0).speeches.filter((s) => s.lastWords).length, 3);
+    }
+    assert.equal(g.phase, 'discussion');
+    assert.throws(() => g.recordSpeech(6, '普通发言'));
+    assert.deepEqual(
+      [...g.speechOrder].sort((a, b) => a - b),
+      g.alive().map((p) => p.id),
+    );
+  }
+});
+
+test('最后一神猎人带走最后一狼时好人胜，终局不能重复行动或重复记胜', () => {
+  const g = fixed(12);
+  for (const id of [1, 2, 3, 4, 5, 7]) g.players[id].alive = false;
+  g.resolveNight({}, 6);
+  assert.equal(g.checkWinner(), null);
+  g.shoot(0);
+  const before = JSON.stringify(g);
+  assert.equal(g.checkWinner(), '好人');
+  for (const act of [
+    () => g.shoot(null),
+    () => g.resolveVotes({}),
+    () => g.resolveNight({}),
+    () => g.openVoting(),
+    () => g.recordSpeech(8, '终局'),
+  ])
+    assert.throws(act);
+  assert.equal(JSON.stringify(g), before);
+});
+
+test('全员 PK 允许互投且拒绝自投，白天放逐遗言之后才入夜', () => {
+  const g = fixed();
+  g.phase = 'discussion';
+  g.openVoting();
+  assert.equal(g.resolveVotes({ 0: 1, 1: 2, 2: 3, 3: 4, 4: 5, 5: 0 }).tie, true);
+  assert.deepEqual(g.legalTargets(1, 'vote'), [1, 3, 4, 5, 6]);
+  assert.equal(g.resolveVotes({ 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }).eliminated, 0);
+  assert.equal(g.votes[0], null);
+  assert.throws(() => g.resolveVotes({}));
+  g.addLastWord(0, '遗言');
+  g.finishLastWords();
+  assert.equal(g.phase, 'night');
+  assert.equal(g.round, 2);
+});
+
+test('单人夜死后顺时针跳过死者，重复查验和格式错误的座位都无效', () => {
+  const g = fixed();
+  g.round = 2;
+  g.players[5].alive = false;
+  g.knowledge[2] = { 0: '狼人' };
+  assert.ok(!g.legalTargets(2, 'night').includes(1));
+  assert.equal(g.nightPlan({ 2: { target: 0 } }, null).seerCheck, null);
+  for (const target of [false, [], {}, ' ']) {
+    assert.equal(g.wolfChoices({ 0: { target } })[0].status, 'invalid');
+    assert.equal(g.normalizedVote(1, target), null);
+  }
+  g.resolveNight({}, 3);
+  assert.deepEqual(g.speechOrder, [4, 0, 1, 2]);
 });

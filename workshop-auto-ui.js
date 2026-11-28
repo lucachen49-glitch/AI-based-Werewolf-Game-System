@@ -85,7 +85,7 @@
       return {
         endpoint: a.endpoint,
         model: a.model,
-        apiKey: a.key || '',
+        ...(a.key ? { apiKey: a.key } : a.hasKey ? { profileSeat: a.seat } : { apiKey: '' }),
         reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(a.reasoningEffort),
       };
     };

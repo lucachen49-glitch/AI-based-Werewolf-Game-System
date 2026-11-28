@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
@@ -80,7 +81,7 @@ function createKeyAssetJobs({
   references,
   config,
   reviewer,
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   provider = createImageProvider({ config, fetchImpl }),
   assetRoot = __dirname,
 } = {}) {

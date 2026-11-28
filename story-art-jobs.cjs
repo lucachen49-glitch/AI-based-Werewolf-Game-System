@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const fs = require('node:fs/promises'),
   path = require('node:path'),
   { randomUUID, createHash } = require('node:crypto');
@@ -41,7 +42,7 @@ function createStoryArtJobs({
   root = path.join(dataRoot, 'art'),
   store,
   config,
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   provider = createImageProvider({ config, fetchImpl }),
   references: referenceLibrary,
   normalize = normalizeImage,
@@ -769,23 +770,21 @@ function createStoryArtJobs({
           }
         }
         const visualAssets = Array.isArray(body.visualAssets)
-          ? body.visualAssets
-              .slice(0, 8)
-              .map((x, i) => ({
-                id: String(x.id || 'visual-' + (i + 1)),
-                label: String(x.label || '视觉素材 ' + (i + 1)).slice(0, 80),
-                kind: x.kind === 'scene' ? 'scene' : 'prop',
-                appearance: String(x.appearance || '').slice(0, 1000),
-                prompt: String(x.prompt || '').slice(0, 4000),
-                scenes: [
-                  ...new Set(
-                    (Array.isArray(x.scenes) ? x.scenes : []).filter(
-                      (n) => Number.isInteger(n) && n >= 0 && n < s.scenes.length,
-                    ),
+          ? body.visualAssets.slice(0, 8).map((x, i) => ({
+              id: String(x.id || 'visual-' + (i + 1)),
+              label: String(x.label || '视觉素材 ' + (i + 1)).slice(0, 80),
+              kind: x.kind === 'scene' ? 'scene' : 'prop',
+              appearance: String(x.appearance || '').slice(0, 1000),
+              prompt: String(x.prompt || '').slice(0, 4000),
+              scenes: [
+                ...new Set(
+                  (Array.isArray(x.scenes) ? x.scenes : []).filter(
+                    (n) => Number.isInteger(n) && n >= 0 && n < s.scenes.length,
                   ),
-                ],
-                status: 'queued',
-              }))
+                ),
+              ],
+              status: 'queued',
+            }))
           : [];
         if (
           visualAssets.some(

@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const { StoryError } = require('./scenario-store.cjs');
 const LIMIT = 48 * 1024 * 1024;
 const MAX_INPUT_BYTES = 50 * 1024 * 1024,
@@ -68,7 +69,7 @@ function mime(bytes) {
     '图片结果不是有效的 PNG、JPEG 或 WebP；请核对后台，本次不会自动重发',
   );
 }
-function createImageProvider({ config, fetchImpl = fetch, timeoutMs = 600000 } = {}) {
+function createImageProvider({ config, fetchImpl = guardedFetch, timeoutMs = 600000 } = {}) {
   return {
     async generate({
       prompt,

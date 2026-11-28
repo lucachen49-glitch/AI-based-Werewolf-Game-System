@@ -371,7 +371,7 @@ function speakNatural(text, { kind, seat, profile }) {
               ? {
                   endpoint: profile.voiceEndpoint,
                   model: profile.voiceModel,
-                  apiKey: profile.voiceKey,
+                  ...requestCredential(profile, 'voice'),
                 }
               : {}),
           }),
@@ -493,21 +493,21 @@ function ruleSections(room) {
   return [
     [
       '角色与阵营',
-      `${BOARDS[room].roles.join('、')}。角色开局随机分配。无警长、无遗言；出局后不再发言。`,
+      `${BOARDS[room].roles.join('、')}。角色开局随机分配。无警长。游戏继续时，首夜出局和白天放逐有遗言，第二夜起夜间出局没有遗言。${room === 12 ? '猎人带走者与猎人适用相同遗言条件。' : ''}`,
     ],
     [
       '夜间技能',
-      `${room === 12 ? '守卫、狼人、预言家、女巫' : '狼人、预言家、女巫'}依次秘密行动。狼人分别独立选择狼刀目标，可选择任意存活玩家或弃权，按多数决定，平票随机；预言家查验一人阵营。女巫解药和毒药各一瓶，每晚只能用一瓶，仅首夜可自救。`,
+      `${room === 12 ? '守卫、狼人、预言家、女巫' : '狼人、预言家、女巫'}依次秘密行动。狼人分别独立选择狼刀目标，可选择任意存活玩家或弃权，首轮一致则定刀，否则参考队友首轮选择再投，按有效票多数决定，平票随机；预言家只能查验其他存活且未经查验的玩家。女巫解药和毒药各一瓶，每晚只能用一瓶，仅首夜可自救，解药用尽后看不到狼刀。`,
     ],
     [
       '白天与平票',
-      '天亮公布出局席位，不公开身份。存活玩家轮流发言，再公开投票，不可自投。平票候选人进行 PK 发言，候选人不参与第二轮投票。再次平票或全员弃票则无人出局，进入下一夜。',
+      '天亮公布出局席位，不公开身份。仅一人夜死时从其下一位存活玩家开始，否则随机起点，顺时针发言，再公开投票，不可自投。平票候选人进行 PK 发言，其他存活玩家只能投给候选人。仅当全体存活玩家都是候选人时，候选人才可互投。再次平票或全员弃票则无人出局，进入下一夜。',
     ],
     ...(room === 12
       ? [
           [
             '猎人与守卫',
-            '守卫可空守或守自己，不可连续守同一人。守护或解药任一生效即可免狼刀，毒药无视守护。猎人被狼刀或放逐可以开枪，中毒不能开枪；先结算猎人技能，再判断胜负。',
+            '守卫可空守或守自己，不可连续守同一人。仅守或仅救可免狼刀，同守同救仍出局并消耗解药，毒药无视守护。猎人被狼刀或放逐可以开枪，中毒不能开枪；放弃开枪时不公开猎人身份。先结算猎人技能，再判断胜负。',
           ],
         ]
       : []),
@@ -562,7 +562,7 @@ function playRuleAudio(room) {
       renderPlayers();
     };
     try {
-      const audio = (current.audio = new globalThis.Audio(`/assets/rules-${room}.mp3?v=1`));
+      const audio = (current.audio = new globalThis.Audio(`/assets/rules-${room}.mp3?v=2`));
       audio.preload = 'auto';
       audio.playbackRate = 1;
       audio.onended = () => finish('');
@@ -624,7 +624,12 @@ function closeRulesIntro() {
 }
 
 function speechConfigSignature(profile) {
-  return JSON.stringify([connectionSignature(profile), profile.name, profile.personality]);
+  return JSON.stringify([
+    connectionSignature(profile),
+    profile.name,
+    profile.personality,
+    profile.historyContext,
+  ]);
 }
 
 function speechSequenceCurrent(sequence) {
@@ -669,9 +674,15 @@ function prepareNextSpeech(id, sequence) {
 }
 
 async function aiSpeeches(pkOnly = false, token = epoch) {
-  const actors = game
-    .alive()
-    .filter((p) => (pkOnly ? game.pk?.includes(p.id) : !game.speeches.some((s) => s.id === p.id)));
+  const lastWords = game.phase === 'lastWords';
+  const order = lastWords ? game.lastWordsQueue : pkOnly ? game.pk : game.speechOrder;
+  const orderedPlayers =
+    lastWords || order?.length ? order.map((id) => game.players[id]) : game.alive();
+  const actors = lastWords
+    ? [...orderedPlayers]
+    : orderedPlayers.filter(
+        (p) => p.alive && !game.speeches.some((s) => s.id === p.id && s.pk === pkOnly),
+      );
   const sequence = { token, round: game.round, phase: game.phase, pk: game.pk?.join(',') || '' };
   try {
     for (let index = 0; index < actors.length; index++) {
@@ -681,21 +692,26 @@ async function aiSpeeches(pkOnly = false, token = epoch) {
       const result = await takeTurn(
         p.id,
         'speech',
-        p.id + 1 + ' 号 · ' + name(p.id) + (pkOnly ? ' 正在进行 PK 发言' : ' 正在发言'),
+        p.id +
+          1 +
+          ' 号 · ' +
+          name(p.id) +
+          (lastWords ? ' 正在发表遗言' : pkOnly ? ' 正在进行 PK 发言' : ' 正在发言'),
         token,
         {},
         prepared,
       );
       if (result === null || !speechSequenceCurrent(sequence)) return;
       const text = limitSpeech(String(result.speech || '本轮我还需要更多信息。'));
-      if (pkOnly) game.recordSpeech(p.id, text);
+      if (lastWords) game.addLastWord(p.id, text);
+      else if (pkOnly) game.recordSpeech(p.id, text);
       else game.addSpeech(p.id, text);
       activeSeat = p.id;
       addSpeech(p.id, text);
       renderAll();
       if (!(await waitForTurn(token, 0)) || !speechSequenceCurrent(sequence)) return;
       const next = actors[index + 1];
-      if (next) prepareNextSpeech(next.id, sequence);
+      if (next && !lastWords) prepareNextSpeech(next.id, sequence);
       await showPlayerSpeech(transcript.at(-1), { token });
       if (!speechSequenceCurrent(sequence)) return;
       activeSeat = null;

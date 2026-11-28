@@ -1,5 +1,8 @@
 'use strict';
 
+let agentProfileRestorePromise = null;
+let agentConfigBaseSavedAt;
+
 function newGameId() {
   const id = globalThis.crypto?.randomUUID?.();
   return id || `game-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -29,9 +32,15 @@ function buildProfiles(saved) {
       control: 'local',
       endpoint: '',
       model: '',
+      personality: PERSONALITIES[i % 6],
+      ...stored,
       reasoningEffort,
       historyContext,
-      personality: PERSONALITIES[i % 6],
+      profileSeat: i + 1,
+      hasKey: !!stored.hasKey,
+      hasVoiceKey: !!stored.hasVoiceKey,
+      keyRevision: stored.keyRevision || 0,
+      voiceKeyRevision: stored.voiceKeyRevision || 0,
       ...Voices.settings(stored, i),
       avatar: Avatar.normalize(stored.avatar, i),
       voiceMatch: Manor.voiceMatchMode(stored, i, Voices.defaults(i)),
@@ -64,8 +73,10 @@ function agentConfigServiceAvailable() {
 function serializedProfilesFor(value, { includeSecrets = true } = {}) {
   return value.map(({ key, voiceKey, connection, connectionError, ...p }) => ({
     ...p,
-    ...(includeSecrets && p.rememberKey ? { key } : {}),
-    ...(includeSecrets && p.rememberVoiceKey ? { voiceKey } : {}),
+    ...(includeSecrets && p.rememberKey && key ? { key } : {}),
+    ...(p.rememberKey === false ? { clearKey: true } : {}),
+    ...(includeSecrets && p.rememberVoiceKey !== false && voiceKey ? { voiceKey } : {}),
+    ...(p.rememberVoiceKey === false ? { clearVoiceKey: true } : {}),
   }));
 }
 
@@ -73,17 +84,24 @@ function serializedProfiles() {
   return serializedProfilesFor(profiles);
 }
 
-function localProfileCopy(data) {
-  if (!agentConfigServiceAvailable()) return data;
-  const strip = (p) => {
+function localProfileCopy(data, migrated = false) {
+  const legacy = migrated ? null : readLocalProfileRecord().profiles;
+  const strip = (p, i) => {
     if (!p || typeof p !== 'object') return p;
     const { key, voiceKey, ...rest } = p;
-    return rest;
+    const old = legacy?.[i];
+    return {
+      ...rest,
+      ...(old?.key && p.rememberKey !== false && !p.clearKey ? { key: old.key } : {}),
+      ...(old?.voiceKey && p.rememberVoiceKey !== false && !p.clearVoiceKey
+        ? { voiceKey: old.voiceKey }
+        : {}),
+    };
   };
   return Array.isArray(data)
     ? data.map(strip)
     : data && typeof data === 'object'
-      ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, strip(v)]))
+      ? Object.fromEntries(Object.entries(data).map(([k, v]) => [k, strip(v, k)]))
       : data;
 }
 
@@ -101,8 +119,8 @@ function localProfilesHaveSecrets(saved) {
   );
 }
 
-function writeLocalProfiles(data, savedAt) {
-  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(localProfileCopy(data)));
+function writeLocalProfiles(data, savedAt, migrated = false) {
+  localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(localProfileCopy(data, migrated)));
   if (savedAt) localStorage.setItem(PROFILE_SAVED_AT_KEY, savedAt);
 }
 
@@ -114,12 +132,32 @@ function queueAgentConfigSync(data, clientSavedAt, onSaved) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         cache: 'no-store',
-        body: JSON.stringify({ profiles: data, clientSavedAt }),
+        body: JSON.stringify({
+          profiles: data,
+          clientSavedAt,
+          baseSavedAt: agentConfigBaseSavedAt,
+        }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
         toast(body.error?.message || '本机 Agent 配置保存失败，浏览器中的配置仍可使用');
         return;
+      }
+      if (body.savedAt) agentConfigBaseSavedAt = body.savedAt;
+      if (Array.isArray(body.profiles)) {
+        body.profiles.forEach((stored, i) => {
+          const current = profiles[i],
+            sent = data[i];
+          if (JSON.stringify(serializedProfilesFor([current])) !== JSON.stringify([sent])) return;
+          Object.assign(current, {
+            hasKey: stored.hasKey,
+            hasVoiceKey: stored.hasVoiceKey,
+            keyRevision: stored.keyRevision,
+            voiceKeyRevision: stored.voiceKeyRevision,
+          });
+          // Newly entered keys stay in page memory so in-flight signatures remain stable.
+        });
+        writeLocalProfiles(serializedProfiles(), readLocalProfileRecord().savedAt, true);
       }
       if (typeof onSaved === 'function') onSaved(body);
     } catch {
@@ -148,13 +186,23 @@ function adoptLocalProfiles(local, remote, revision) {
     savedAt = local.savedAt || new Date().toISOString();
   if (stored)
     merged.forEach((p, i) => {
-      if (!p.key && p.rememberKey && stored[i].key) p.key = stored[i].key;
-      if (!p.voiceKey && p.rememberVoiceKey !== false && stored[i].voiceKey)
+      const agentMatches = p.endpoint === stored[i].endpoint;
+      const voiceMatches = p.voiceEndpoint === stored[i].voiceEndpoint;
+      if (!p.key && p.rememberKey && agentMatches && stored[i].key) p.key = stored[i].key;
+      if (!p.voiceKey && p.rememberVoiceKey !== false && voiceMatches && stored[i].voiceKey)
         p.voiceKey = stored[i].voiceKey;
+      p.hasKey = p.rememberKey && agentMatches && stored[i].hasKey;
+      p.hasVoiceKey = p.rememberVoiceKey !== false && voiceMatches && stored[i].hasVoiceKey;
+      p.keyRevision = stored[i].keyRevision;
+      p.voiceKeyRevision = stored[i].voiceKeyRevision;
     });
   if (revision === agentPersistenceRevision) {
     let filled = false;
     profiles.forEach((p, i) => {
+      p.hasKey = merged[i].hasKey;
+      p.hasVoiceKey = merged[i].hasVoiceKey;
+      p.keyRevision = merged[i].keyRevision;
+      p.voiceKeyRevision = merged[i].voiceKeyRevision;
       if (!p.key && p.rememberKey && merged[i].key) {
         p.key = merged[i].key;
         filled = true;
@@ -171,38 +219,77 @@ function adoptLocalProfiles(local, remote, revision) {
     if (!legacy) return;
     const current = readLocalProfileRecord();
     if (current.profiles && current.savedAt === local.savedAt)
-      writeLocalProfiles(current.profiles, current.savedAt);
+      writeLocalProfiles(current.profiles, current.savedAt, true);
   });
 }
 
-async function restoreAgentProfiles() {
-  if (!agentConfigServiceAvailable()) return;
-  const revision = agentPersistenceRevision,
-    local = readLocalProfileRecord();
-  try {
-    const response = await fetch('/api/agent-config', { cache: 'no-store' });
-    const remote = await response.json().catch(() => ({}));
-    if (!response.ok) throw Error(remote.error?.message || '本机 Agent 配置暂不可用');
-    if (remote.configured && Array.isArray(remote.profiles)) {
-      const localTime = local.savedAt ? Date.parse(local.savedAt) : NaN,
-        remoteTime = remote.savedAt ? Date.parse(remote.savedAt) : NaN;
-      if (
-        local.profiles &&
-        Number.isFinite(localTime) &&
-        Number.isFinite(remoteTime) &&
-        localTime > remoteTime
-      ) {
-        adoptLocalProfiles(local, remote, revision);
+function restoreAgentProfiles() {
+  if (!agentConfigServiceAvailable()) return Promise.resolve();
+  if (agentProfileRestorePromise) return agentProfileRestorePromise;
+  const restorePromise = (async () => {
+    const revision = agentPersistenceRevision,
+      local = readLocalProfileRecord();
+    try {
+      const response = await fetch('/api/agent-config', { cache: 'no-store' });
+      const remote = await response.json().catch(() => ({}));
+      if (!response.ok) throw Error(remote.error?.message || '本机 Agent 配置暂不可用');
+      agentConfigBaseSavedAt = remote.savedAt || null;
+      if (remote.configured && Array.isArray(remote.profiles)) {
+        const localTime = local.savedAt ? Date.parse(local.savedAt) : NaN,
+          remoteTime = remote.savedAt ? Date.parse(remote.savedAt) : NaN;
+        if (
+          local.profiles &&
+          Number.isFinite(localTime) &&
+          Number.isFinite(remoteTime) &&
+          localTime > remoteTime
+        ) {
+          adoptLocalProfiles(local, remote, revision);
+          return;
+        }
+        if (revision !== agentPersistenceRevision) return;
+        if (localProfilesHaveSecrets(local.profiles)) {
+          const migrated = buildProfiles(remote.profiles);
+          const legacy = buildProfiles(local.profiles);
+          let conflict = false;
+          migrated.forEach((p, i) => {
+            for (const [key, endpoint, flag] of [
+              ['key', 'endpoint', 'hasKey'],
+              ['voiceKey', 'voiceEndpoint', 'hasVoiceKey'],
+            ]) {
+              if (!legacy[i][key]) continue;
+              if (legacy[i][endpoint] !== p[endpoint]) {
+                conflict = true;
+                continue;
+              }
+              if (!p[flag]) p[key] = legacy[i][key];
+            }
+          });
+          if (conflict) {
+            toast(
+              '本机配置已更新，浏览器旧密钥对应的接口不同，已保留浏览器旧配置。请核对接口与密钥后保存。',
+            );
+            return;
+          }
+          profiles = migrated;
+          renderAll();
+          queueAgentConfigSync(serializedProfiles(), new Date().toISOString(), () => {
+            if (revision === agentPersistenceRevision)
+              writeLocalProfiles(serializedProfiles(), remote.savedAt, true);
+          });
+          return;
+        }
+        profiles = buildProfiles(remote.profiles);
+        writeLocalProfiles(serializedProfiles(), remote.savedAt || new Date().toISOString(), true);
+        renderAll();
         return;
       }
-      if (revision !== agentPersistenceRevision) return;
-      profiles = buildProfiles(remote.profiles);
-      writeLocalProfiles(serializedProfiles(), remote.savedAt || new Date().toISOString());
-      renderAll();
-      return;
-    }
-    if (local.profiles) adoptLocalProfiles(local, null, revision);
-  } catch {}
+      if (local.profiles) adoptLocalProfiles(local, null, revision);
+    } catch {}
+  })().finally(() => {
+    if (agentProfileRestorePromise === restorePromise) agentProfileRestorePromise = null;
+  });
+  agentProfileRestorePromise = restorePromise;
+  return restorePromise;
 }
 
 function openAgent(id) {
@@ -231,6 +318,7 @@ function openAgent(id) {
   );
   $('historyContextInput').value = p.historyContext === 'full' ? 'full' : 'recent';
   $('keyInput').value = p.key;
+  $('keyInput').placeholder = p.hasKey ? '已由本机加密保存，留空继续使用' : '输入 API 密钥';
   $('rememberKeyInput').checked = p.rememberKey;
   $('keyInput').type = 'password';
   $('showKey').textContent = '显示';
@@ -340,6 +428,9 @@ function fillVoiceForm(profile, seat) {
     $(id).value = p[key];
   $('voiceMatchInput').value = profile.voiceMatch || 'custom';
   $('rememberVoiceKeyInput').checked = p.rememberVoiceKey;
+  $('voiceKeyInput').placeholder = p.hasVoiceKey
+    ? '已由本机加密保存，留空继续使用'
+    : '语音服务专用密钥';
   $('voicePreviewStatus').textContent = '试听当前设置，满意后点击保存配置。';
   updateVoiceForm();
 }
@@ -440,8 +531,24 @@ async function previewVoice() {
   );
 }
 
+function requestCredential(profile, kind = 'agent') {
+  const key = kind === 'voice' ? profile.voiceKey : profile.key;
+  const configured = kind === 'voice' ? profile.hasVoiceKey : profile.hasKey;
+  return key
+    ? { apiKey: key }
+    : configured && profile.profileSeat
+      ? { profileSeat: profile.profileSeat }
+      : { apiKey: '' };
+}
+
 function connectionSignature(p) {
-  return JSON.stringify([p.control, p.endpoint, p.model, p.key, p.reasoningEffort]);
+  return JSON.stringify([
+    p.control,
+    p.endpoint,
+    p.model,
+    p.key || p.keyRevision || '',
+    p.reasoningEffort,
+  ]);
 }
 
 function saveAgent() {
@@ -484,7 +591,7 @@ function saveAgent() {
   closeModal();
   renderAll();
   toast(
-    `${p.name} 的配置已保存；${p.rememberKey ? '密钥将在此浏览器自动恢复' : '密钥仅在本次页面使用，已删除本地保存'}`,
+    `${p.name} 的配置已保存；${p.rememberKey ? '密钥由本机服务加密保存' : '密钥仅在本次页面使用，已删除本地保存'}`,
   );
 }
 

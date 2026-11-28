@@ -1,9 +1,9 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const AgentRequest = require('./agent-request.js');
 const Limits = require('./limits.js');
 const { assertSameOrigin, assertJSON } = require('./request-guard.cjs');
-const fs = require('node:fs'),
-  fsp = require('node:fs/promises');
+const { sendFile } = require('./file-response.cjs');
 const Schema = require('./scenario.js');
 const Preview = require('./workshop-preview.js');
 const { StoryError, createScenarioStore } = require('./scenario-store.cjs');
@@ -16,7 +16,8 @@ const { createStoryAssets } = require('./story-assets.cjs');
 const { createPreviewJobs } = require('./story-preview-jobs.cjs');
 const { createScenarioReviews } = require('./scenario-review.cjs');
 function createStoryAPI({
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
+  resolveCredential = async (input) => input,
   store = createScenarioStore(),
   config = createVideoConfigStore(),
   jobs,
@@ -161,46 +162,8 @@ function createStoryAPI({
     }
   }
   async function media(req, res, id, name, service = jobs, mime = 'video/mp4') {
-    const file = await service.mediaFile(id, name),
-      stat = await fsp.stat(file),
-      size = stat.size;
-    let start = 0,
-      end = size - 1,
-      status = 200;
-    if (req.headers.range) {
-      const m = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range);
-      if (!m || (!m[1] && !m[2])) {
-        res.writeHead(416, { 'Content-Range': 'bytes */' + size });
-        return res.end();
-      }
-      if (m[1]) {
-        start = Number(m[1]);
-        end = m[2] ? Math.min(Number(m[2]), end) : end;
-      } else start = Math.max(0, size - Number(m[2]));
-      if (
-        !Number.isSafeInteger(start) ||
-        !Number.isSafeInteger(end) ||
-        start > end ||
-        start >= size
-      ) {
-        res.writeHead(416, { 'Content-Range': 'bytes */' + size });
-        return res.end();
-      }
-      status = 206;
-    }
-    res.writeHead(status, {
-      'Content-Type': mime,
-      'Content-Length': end - start + 1,
-      'Accept-Ranges': 'bytes',
-      'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff',
-      ...(status === 206 ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
-    });
-    if (req.method === 'HEAD') return res.end();
-    const stream = fs.createReadStream(file, { start, end });
-    res.once('close', () => stream.destroy());
-    stream.on('error', () => res.destroy());
-    stream.pipe(res);
+    const file = await service.mediaFile(id, name);
+    return sendFile(req, res, file, { type: mime });
   }
   async function handle(req, res, name) {
     const controller = new AbortController(),
@@ -266,19 +229,8 @@ function createStoryAPI({
         (match = /^api\/story-art-media\/([^/]+)\/([^/]+)$/.exec(name)) &&
         ['GET', 'HEAD'].includes(req.method)
       ) {
-        const file = await artJobs.mediaFile(match[1], match[2]),
-          stat = await fsp.stat(file);
-        res.writeHead(200, {
-          'Content-Type': 'image/png',
-          'Content-Length': stat.size,
-          'Cache-Control': 'private, no-store',
-          'X-Content-Type-Options': 'nosniff',
-        });
-        if (req.method === 'HEAD') return res.end();
-        const stream = fs.createReadStream(file);
-        res.once('close', () => stream.destroy());
-        stream.on('error', () => res.destroy());
-        return stream.pipe(res);
+        const file = await artJobs.mediaFile(match[1], match[2]);
+        return await sendFile(req, res, file, { type: 'image/png', cache: 'private, no-store' });
       }
       let body;
       if (req.method === 'POST') {
@@ -288,6 +240,10 @@ function createStoryAPI({
           req,
           name === 'api/story-assets/references' ? 12 * 1024 * 1024 : 320000,
         );
+      }
+      if (body) {
+        body = await resolveCredential(body);
+        if (body.agent) body.agent = await resolveCredential(body.agent);
       }
       let result;
       if (name === 'api/story-productions' && req.method === 'GET')

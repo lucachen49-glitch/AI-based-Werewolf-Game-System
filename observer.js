@@ -81,7 +81,7 @@
       );
     if (r.witchId != null)
       parts.push(
-        `${seat(r.witchId)}女巫${r.saved ? `使用解药救下 ${seat(r.victim)}` : r.poisoned != null ? `对 ${seat(r.poisoned)} 使用毒药` : '未使用药水'}`,
+        `${seat(r.witchId)}女巫${r.saved ? `对 ${seat(r.victim)} 使用解药${r.guardTarget === r.victim ? '，同守同救仍出局' : ''}` : r.poisoned != null ? `对 ${seat(r.poisoned)} 使用毒药` : '未使用药水'}`,
       );
     return parts.join('。') + '。';
   }
@@ -126,9 +126,11 @@
         wolfChoices,
         godText:
           detail +
-          (r.victim == null
-            ? '狼人没有形成有效的袭击目标。'
-            : `${tied ? '票数相同，按规则随机确定' : '狼队最终确定'}今晚袭击 ${seat(r.victim)}。最终是否出局，还要看守护和用药。`),
+          (r.confirming
+            ? '首轮选择不一致，进入第二轮确认。'
+            : r.victim == null
+              ? '狼人没有形成有效的袭击目标。'
+              : `${tied ? '票数相同，按规则随机确定' : '狼队最终确定'}今晚袭击 ${seat(r.victim)}。最终是否出局，还要看守护和用药。`),
       };
     }
     if (role === '预言家')
@@ -149,6 +151,7 @@
         'poison-spent': '毒药已经用完，本次投毒未生效',
         'invalid-poison': '毒药目标必须是其他存活玩家，本次选择未生效',
         'potions-spent': '解药和毒药均已用完',
+        'potion-conflict': '同时选择了解药和毒药；每晚最多使用一瓶，本夜以解药为准，毒药保留',
         unused: '本夜选择保留药水',
       };
       const explanation = (r.witchOutcome?.reasons || [])
@@ -162,7 +165,7 @@
         witchState: r.witchState,
         witchOutcome: r.witchOutcome,
         godText: r.saved
-          ? `${seat(actor)}女巫对 ${seat(r.victim)} 使用解药，抵挡本夜的狼刀。解药已用完，毒药${r.witchState?.poisonAvailable === false ? '也已用完' : '仍然保留，本夜不能再使用'}。最终存亡在天亮统一公布。`
+          ? `${seat(actor)}女巫对 ${seat(r.victim)} 使用解药，${r.guardTarget === r.victim ? '同守同救，无法挡住本夜狼刀' : '抵挡本夜的狼刀'}。${explanation ? explanation + '。' : ''}解药已用完，毒药${r.witchState?.poisonAvailable === false ? '也已用完' : '仍然保留，本夜不能再使用'}。最终存亡在天亮统一公布。`
           : r.poisoned != null
             ? `${seat(actor)}女巫对 ${seat(r.poisoned)} 使用毒药。毒药无视守护，使用后耗尽，本夜不能再使用解药。最终结果在天亮结算。`
             : `${seat(actor)}女巫本夜没有使用药水。${explanation ? explanation + '。' : ''}`,
@@ -222,7 +225,7 @@
       detail = ' 每位存活玩家可以投票或弃票，不能投自己。';
     } else if (/进入 PK/.test(text)) {
       kind = 'pk';
-      detail = ' 平票玩家补充发言，随后由其他存活玩家再次投票。';
+      detail = ' 平票玩家补充发言，其他存活玩家再次投票。全员都是候选人时互投。';
     } else if (/无人被放逐/.test(text)) {
       kind = 'exile';
       detail = ' 本轮没有玩家因投票出局。';
@@ -244,7 +247,8 @@
       kind,
       round: log.round,
       phase: log.phase,
-      publicText: text + detail,
+      ...(log.private ? { private: true } : {}),
+      publicText: log.private ? '' : text + detail,
       godText: text + detail + (night && !night.narrated ? ' ' + nightSummary(night) : ''),
       ...(night ? { result: night } : {}),
     };

@@ -1,6 +1,3 @@
-let referenceCatalog = [],
-  referenceCatalogRoom = 0,
-  referenceEpoch = 0;
 ('use strict');
 const $ = (id) => document.getElementById(id),
   S = NightfallScenario;
@@ -617,84 +614,7 @@ function read() {
     ...(current ? { id: current.id, version: current.version } : {}),
   };
 }
-let agents = [],
-  temporaryOrganizerKey = '',
-  temporaryOrganizerSignature = '';
-function organizerSignature(profile) {
-  return profile ? `${profile.seat}|${profile.endpoint}|${profile.model}` : '';
-}
-function selectedOrganizer() {
-  return agents[Number($('organizer')?.value)] || null;
-}
-function organizerAgent(profile = selectedOrganizer()) {
-  if (!profile) return null;
-  const signature = organizerSignature(profile);
-  const key =
-    profile.key || (temporaryOrganizerSignature === signature ? temporaryOrganizerKey : '');
-  return { ...profile, key };
-}
-function updateOrganizerCredentialStatus() {
-  const profile = selectedOrganizer(),
-    agent = organizerAgent(profile),
-    label = $('organizerTemporaryKeyLabel'),
-    input = $('organizerTemporaryKey'),
-    status = $('organizerStatus');
-  if (label) label.hidden = !profile || !!profile.key;
-  if (input) {
-    const value =
-      profile && !profile.key && temporaryOrganizerSignature === organizerSignature(profile)
-        ? temporaryOrganizerKey
-        : '';
-    if (input.value !== value) input.value = value;
-  }
-  if (!status) return;
-  if (!agents.length) {
-    status.textContent =
-      '尚未找到可用的 API Agent。请返回游戏 Agent 配置页补全接口地址和模型后刷新。';
-    return;
-  }
-  if (agent?.key) {
-    status.textContent = profile.key
-      ? '当前整理 Agent 已配置密钥。密钥仅用于本次请求。'
-      : '临时密钥仅保存在当前页面内存，关闭或刷新页面后自动清除。';
-    return;
-  }
-  status.textContent =
-    '当前整理 Agent 未保存密钥。请在此输入本次临时密钥，或返回游戏 Agent 配置页完成配置。';
-}
-function refreshOrganizerAgents() {
-  const select = $('organizer'),
-    previous = agents[Number(select?.value)],
-    previousKey = previous ? `${previous.seat}|${previous.endpoint}|${previous.model}` : '';
-  let profiles = [];
-  try {
-    const saved = JSON.parse(localStorage.getItem('nightfall-profiles-v1') || '[]');
-    profiles = Array.isArray(saved) ? saved : Object.values(saved || {});
-  } catch {}
-  const eligible = profiles.filter((profile, index) => index < 12 && profile?.control === 'api');
-  agents = eligible
-    .filter((profile) => profile.endpoint && profile.model)
-    .map((profile, index) => ({
-      seat: profiles.indexOf(profile) + 1,
-      ...profile,
-      reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(profile.reasoningEffort),
-    }));
-  if (!select) return agents;
-  if (agents.length) {
-    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
-    select.innerHTML = agents
-      .map(
-        (a, i) =>
-          `<option value="${i}">${a.seat} 号 · ${esc(a.name || '未命名 Agent')} / ${esc(a.model)}</option>`,
-      )
-      .join('');
-    const keep = agents.findIndex((a) => `${a.seat}|${a.endpoint}|${a.model}` === previousKey);
-    select.value = String(keep >= 0 ? keep : 0);
-  } else select.innerHTML = '<option value="">暂无可用整理 Agent</option>';
-  updateOrganizerCredentialStatus();
-  updateButtons();
-  return agents;
-}
+
 refreshOrganizerAgents();
 async function library(selected = current?.id) {
   const list = (await api('/api/scenarios')).filter((s) => (s.roomSize || 6) === roomSize);
@@ -1204,7 +1124,7 @@ $('import').onchange = guard(async () => {
 $('prepare').onclick = guard(async () => {
   const agent = organizerAgent();
   if (!agent) throw Error('请先配置并选择一个 API Agent');
-  if (!agent.key)
+  if (!agent.key && !agent.hasKey)
     throw Error('请在整理 Agent 配置旁输入本次临时 API 密钥，或返回游戏 Agent 配置页补全密钥');
   if (current && !confirm('整理将替换当前编辑区，未保存的内容会丢失。继续？')) return;
   notice('正在整理人物关系与分镜，最长约两分钟…');
@@ -1213,7 +1133,7 @@ $('prepare').onclick = guard(async () => {
     source: $('source').value,
     endpoint: agent.endpoint,
     model: agent.model,
-    apiKey: agent.key,
+    ...organizerCredential(agent),
     reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(agent.reasoningEffort),
   });
   render(r.draft);
@@ -1576,84 +1496,6 @@ document.addEventListener('change', (e) => {
   if (e.target.matches('[data-reference-frame]')) renderReferencePreviews();
 });
 
-async function loadReferenceCatalog(force = false) {
-  const size = roomSize;
-  if (!force && referenceCatalogRoom === size) return;
-  const epoch = ++referenceEpoch;
-  try {
-    const rows = await api('/api/story-assets/references?roomSize=' + size);
-    if (epoch !== referenceEpoch || roomSize !== size) return;
-    const draft = rawDraft();
-    referenceCatalog = rows;
-    referenceCatalogRoom = size;
-    renderExtraReferences(draft);
-    $('referenceStatus').textContent = rows.length
-      ? '当前人数已保存 ' + rows.length + ' 张参考图。'
-      : '当前人数尚未导入独立参考图。';
-  } catch (e) {
-    if (epoch === referenceEpoch)
-      $('referenceStatus').textContent =
-        '参考图目录读取失败，可重新打开工坊或重试导入。' + e.message;
-  }
-}
-function renderExtraReferences(draft) {
-  const rows = referenceCatalogRoom === roomSize ? referenceCatalog : [];
-  document.querySelectorAll('[data-extra-reference]').forEach((select) => {
-    const i = Number(select.dataset.extraReference),
-      refs = draft.scenes[i]?.extraReferences || [];
-    const available = new Map(rows.map((r) => [r.id, r]));
-    refs.forEach((r) => {
-      if (!available.has(r.id))
-        available.set(r.id, { id: r.id, label: '已选择的参考素材（正在读取）', kind: r.purpose });
-    });
-    // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
-    select.innerHTML = Array.from(
-      available.values(),
-      (r) =>
-        `<option value="${esc(r.id)}" ${refs.some((x) => x.id === r.id) ? 'selected' : ''}>${esc(r.label)}</option>`,
-    ).join('');
-    renderExtraReferencePreview(i, refs);
-  });
-  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
-  $('referenceLibraryPreview').innerHTML = rows
-    .map(
-      (r) =>
-        `<button type="button" data-reference-zoom="${esc(r.url)}" data-reference-caption="${esc(r.label)}"><img src="${esc(r.url)}" alt="${esc(r.label)}"><span>${esc(r.label)}</span></button>`,
-    )
-    .join('');
-}
-function renderExtraReferencePreview(i, initial) {
-  const box = document.querySelector('[data-extra-reference-preview="' + i + '"]'),
-    select = document.querySelector('[data-extra-reference="' + i + '"]');
-  if (!box || !select) return;
-  const old =
-    initial ||
-    Array.from(box.querySelectorAll('[data-extra-item]'), (el) => ({
-      id: el.dataset.extraItem,
-      purpose: el.querySelector('[data-extra-purpose]').value,
-      order: Number(el.querySelector('[data-extra-order]').value),
-      fixedLayout: el.querySelector('[data-extra-fixed-layout]')?.value || '',
-      allowedMovements: el.querySelector('[data-extra-allowed-movements]')?.value || '',
-    }));
-  // eslint-disable-next-line no-unsanitized/property -- Dynamic story text and URLs are escaped, with remaining values fixed enums or numeric indices.
-  box.innerHTML = Array.from(select.selectedOptions, (option, n) => {
-    const r = referenceCatalog.find((x) => x.id === option.value),
-      saved = old.find((x) => x.id === option.value);
-    return `<div data-extra-item="${esc(option.value)}">${r ? `<button type="button" data-reference-zoom="${esc(r.url)}" data-reference-caption="${esc(r.label)}"><img src="${esc(r.url)}" alt="${esc(r.label)}"></button>` : ''}<span>${esc(r?.label || option.textContent)}</span><label>顺序<input type="number" min="1" max="14" data-extra-order value="${saved?.order || old.findIndex((x) => x.id === option.value) + 1 || n + 1}"></label><label>用途<select data-extra-purpose>${[
-      ['character', '人物'],
-      ['scene', '场景'],
-      ['costume', '服装'],
-      ['prop', '道具'],
-    ]
-      .map(
-        ([value, label]) =>
-          `<option value="${value}" ${(saved?.purpose || r?.kind) === value ? 'selected' : ''}>${label}</option>`,
-      )
-      .join(
-        '',
-      )}</select></label><label>固定外观及相对位置<textarea data-extra-fixed-layout maxlength="1000" rows="2">${esc(saved?.fixedLayout || '')}</textarea></label><label>剧情中允许的移动<textarea data-extra-allowed-movements maxlength="1000" rows="2">${esc(saved?.allowedMovements || '')}</textarea></label></div>`;
-  }).join('');
-}
 $('referenceUpload').onclick = guard(async () => {
   const file = $('referenceFile').files[0],
     size = roomSize;

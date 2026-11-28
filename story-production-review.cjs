@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const AgentRequest = require('./agent-request.js');
 const Limits = require('./limits.js');
 const PRODUCTION_REVIEW_REASONING_EFFORT = 'xhigh';
@@ -92,7 +93,7 @@ function report(raw, story, agent) {
   };
 }
 function createProductionReviewer({
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   validateChat,
   normalizeEndpoint,
   transcribe = localTranscript,

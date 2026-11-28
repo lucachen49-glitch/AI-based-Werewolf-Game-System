@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch, createGuardedFetch } = require('./upstream-guard.cjs');
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -6,6 +7,7 @@ const { speechAudio, SpeechError } = require('./voice.cjs');
 const { createImageConfigStore, ImageConfigError } = require('./image-config.cjs');
 const {
   createAgentConfigStore,
+  publicAgentConfig,
   AgentConfigError,
   MAX_BYTES: AGENT_CONFIG_MAX_BYTES,
 } = require('./agent-config.cjs');
@@ -15,80 +17,10 @@ const { randomUUID } = require('node:crypto');
 const { requestAgent, requestAgentWithRetry } = require('./agent-transport.cjs');
 const { createAgentLogger, safeEntry } = require('./agent-log.cjs');
 const { assertSameOrigin, assertJSON } = require('./request-guard.cjs');
+const { createCredentialResolver } = require('./credential-resolver.cjs');
 const base = __dirname;
-const APP_SCRIPTS = require('./app-manifest.cjs');
-const allowed = new Set([
-  'index.html',
-  'styles.css',
-  'limits.js',
-  ...APP_SCRIPTS,
-  'engine.js',
-  'voices.js',
-  'observer.js',
-  'spectator.js',
-  'assets/rules-6.mp3',
-  'assets/rules-12.mp3',
-  'image-settings.html',
-  'image-settings.css',
-  'image-settings.js',
-  'manor.js',
-  'manor.css',
-  'manor-twelve.css',
-  'theme.css',
-  'soundfx.js',
-  'assets/music/manor-nocturne.ogg',
-  'assets/sfx/wolf-howl-v3.wav',
-  ...require('./soundfx.js').names.map((n) => 'assets/sfx/' + n + '.wav'),
-  ...[
-    'manor-room',
-    'manor-table',
-    ...Array.from({ length: 12 }, (_, i) => 'portrait-' + String(i + 1).padStart(2, '0')).flatMap(
-      (id) => [id, id + '-thumb', id + '-closed'],
-    ),
-  ].map((id) => 'assets/manor/' + id + '.webp'),
-]);
-const types = {
-  '.html': 'text/html; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.mp3': 'audio/mpeg',
-  '.webp': 'image/webp',
-  '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg',
-};
-allowed.add('assets/sfx/wolf-attack-v4.wav');
-for (const name of require('./soundfx.js').names) allowed.add(require('./soundfx.js').source(name));
-Object.values(require('./soundfx.js').musicTracks).forEach((file) => allowed.add(file));
-[
-  'avatar.js',
-  'agent-request.js',
-  'workshop-auto-ui.js',
-  'workshop-auto.css',
-  'recording-surface.js',
-  'story-subtitle-ui.js',
-  'recording.js',
-  'recording.css',
-  'portrait.js',
-  'portrait.css',
-  'api-wait.js',
-  'fullscreen.css',
-  'character-intros.js',
-  'character-intro-ui.js',
-  'character-intro.css',
-  'scenario.js',
-  'story-player.js',
-  'story-game.js',
-  'story.css',
-  'scenario-settings.html',
-  'scenario-settings.css',
-  'scenario-settings.js',
-  'scenario-review-ui.js',
-  'story-art-ui.js',
-  'workshop-state.js',
-  'workshop-flow.js',
-  'workshop-preview.js',
-  'workshop-preview-ui.js',
-].forEach((f) => allowed.add(f));
+const { allowed, types } = require('./static-manifest.cjs');
+const { sendFile } = require('./file-response.cjs');
 const loopback = new Set(['localhost', '127.0.0.1', '[::1]']);
 // Main page: AI-generated text is rendered as HTML, so scripts are limited to bundled files.
 const MAIN_PAGE_CSP =
@@ -364,6 +296,9 @@ function upstreamError(status, data, reasoningEffort) {
 }
 function upstreamNetworkError(error) {
   const code = error?.cause?.code || error?.code;
+  if (code === 'UPSTREAM_PRIVATE_ADDRESS') return new ApiError(400, code, error.message);
+  if (['ERR_UPSTREAM_REDIRECT', 'ERR_AGENT_REDIRECT', 'ERR_UPSTREAM_UPGRADE'].includes(code))
+    return new ApiError(502, code, '上游接口返回了不允许的重定向或协议切换，请检查接口地址。');
   if (code === 'EACCES' || code === 'EPERM')
     return new ApiError(
       502,
@@ -475,6 +410,7 @@ async function executeChat(body, options, controller, onRequest = () => {}) {
       log('started');
     }
     validateChat(body);
+    body = await options.resolveCredential(body);
     if (diagnostic && ['speech', 'vote', 'night', 'hunter'].includes(body.action?.task))
       diagnostic.requestContext = body.messages;
     if (Buffer.byteLength(JSON.stringify(body)) > options.maxRequestBytes)
@@ -583,7 +519,9 @@ async function executeChat(body, options, controller, onRequest = () => {}) {
         )
       : controller.signal.aborted
         ? new ApiError(499, 'REQUEST_CANCELLED', '请求已取消')
-        : error instanceof ApiError || error instanceof AgentRequest.ResponseError
+        : error instanceof ApiError ||
+            error instanceof AgentRequest.ResponseError ||
+            error instanceof AgentConfigError
           ? error
           : upstreamNetworkError(error);
     httpStatus ??= failure.status;
@@ -632,7 +570,9 @@ async function handleChat(req, res, options) {
   } catch (error) {
     if (disconnected || res.destroyed) return;
     const failure =
-      error instanceof ApiError || error instanceof AgentRequest.ResponseError
+      error instanceof ApiError ||
+      error instanceof AgentRequest.ResponseError ||
+      error instanceof AgentConfigError
         ? error
         : upstreamNetworkError(error);
     if (failure.code === 'GAME_REQUESTS_ACTIVE') res.setHeader('Retry-After', '1');
@@ -792,7 +732,8 @@ async function handleAgentEvent(req, res, agentLogger) {
   }
 }
 
-async function handleGameLog(req, res, gameDirectory, gameId) {
+async function handleGameLog(req, res, gameDirectory, gameId, logger) {
+  await logger?.flush?.();
   try {
     if (!['GET', 'HEAD'].includes(req.method)) {
       res.setHeader('Allow', 'GET, HEAD');
@@ -857,7 +798,7 @@ async function handleSpeech(req, res, options) {
       throw new ApiError(415, 'INVALID_CONTENT_TYPE', '请使用 JSON 格式发送请求');
     if (Number(req.headers['content-length']) > 32768)
       throw new ApiError(413, 'REQUEST_TOO_LARGE', '语音请求内容过大');
-    const body = await readJSON(req, 32768);
+    const body = await options.resolveCredential(await readJSON(req, 32768), 'voice');
     if (controller.signal.aborted) return;
     if (options.state.active >= 2)
       throw new ApiError(429, 'VOICE_BUSY', '语音正在生成，请稍候再试听');
@@ -884,7 +825,9 @@ async function handleSpeech(req, res, options) {
     if (res.destroyed) return;
     const failure = timedOut
       ? new ApiError(504, 'VOICE_TIMEOUT', '语音生成总等待时间已用完，请重试当前语音')
-      : error instanceof ApiError || error instanceof SpeechError
+      : error instanceof ApiError ||
+          error instanceof SpeechError ||
+          error instanceof AgentConfigError
         ? error
         : new ApiError(502, 'VOICE_NETWORK_ERROR', '语音服务暂不可用，请检查网络或声音设置');
     const attempts = Number.isInteger(error?.attempts) ? error.attempts : timedOut ? 3 : 1;
@@ -926,7 +869,9 @@ async function handleAgentConfig(req, res, store) {
     if (!assertSameOrigin(req, { write: req.method === 'POST' }))
       throw new ApiError(403, 'INVALID_ORIGIN', '请从游戏本机启动地址打开 Agent 配置。');
     if (req.method === 'GET') {
-      const loaded = await store.load();
+      const loaded = publicAgentConfig(
+        store.loadPublic ? await store.loadPublic() : await store.load(),
+      );
       return sendJSON(
         res,
         200,
@@ -953,7 +898,12 @@ async function handleAgentConfig(req, res, store) {
       throw new ApiError(400, 'INVALID_AGENT_CONFIG', 'Agent 配置格式不正确。');
     return sendJSON(res, 200, {
       configured: true,
-      ...(await store.save(body.profiles, { clientSavedAt: body.clientSavedAt })),
+      ...publicAgentConfig(
+        await store.save(body.profiles, {
+          clientSavedAt: body.clientSavedAt,
+          baseSavedAt: body.baseSavedAt,
+        }),
+      ),
       storage: 'Windows 当前用户加密保存',
     });
   } catch (error) {
@@ -965,9 +915,9 @@ async function handleAgentConfig(req, res, store) {
   }
 }
 function createServer({
-  fetchImpl = fetch,
+  fetchImpl = guardedFetch,
   gameFetchImpl = requestAgent,
-  connectionFetchImpl = fetchImpl === fetch ? requestAgentWithRetry : fetchImpl,
+  connectionFetchImpl = fetchImpl === guardedFetch ? requestAgentWithRetry : fetchImpl,
   connectionTimeoutMs = Limits.AGENT_CONNECTION_TIMEOUT_MS,
   connectionRetries = 1,
   connectionRetryDelayMs = 150,
@@ -988,6 +938,14 @@ function createServer({
   agentConfigStore = createAgentConfigStore(),
   allowLoopbackUpstream = localUpstreamDefault(),
 } = {}) {
+  if (fetchImpl === guardedFetch)
+    fetchImpl = createGuardedFetch({ allowLoopback: allowLoopbackUpstream });
+  const gameTransport = gameFetchImpl;
+  gameFetchImpl = (endpoint, init) =>
+    gameTransport(endpoint, { ...init, allowLoopback: allowLoopbackUpstream });
+  const connectionTransport = connectionFetchImpl;
+  connectionFetchImpl = (endpoint, init) =>
+    connectionTransport(endpoint, { ...init, allowLoopback: allowLoopbackUpstream });
   const instanceVersion = randomUUID();
   const activeGameRequests = new Map();
   const beginGameRequest = (key, details) =>
@@ -995,7 +953,9 @@ function createServer({
   const endGameRequest = (key) => activeGameRequests.delete(key);
   const endpointFor = (endpoint) =>
     normalizeEndpoint(endpoint, { allowLoopback: allowLoopbackUpstream });
+  const resolveCredential = createCredentialResolver(agentConfigStore);
   const chatOptions = {
+    resolveCredential,
     normalizeEndpoint: endpointFor,
     fetchImpl,
     connectionFetchImpl,
@@ -1011,9 +971,16 @@ function createServer({
     beginGameRequest,
     endGameRequest,
   };
-  const speechOptions = { fetchImpl, speechTimeoutMs, synthesizeImpl, state: { active: 0 } };
+  const speechOptions = {
+    resolveCredential,
+    fetchImpl,
+    speechTimeoutMs,
+    synthesizeImpl,
+    state: { active: 0 },
+  };
   const stories = require('./story-api.cjs').createStoryAPI({
     fetchImpl,
+    resolveCredential,
     store: storyStore,
     config: videoConfigStore,
     jobs: videoJobs,
@@ -1071,7 +1038,7 @@ function createServer({
     }
     const gameLogMatch = /^api\/game-logs\/([a-zA-Z0-9_-]{1,80})$/.exec(name);
     if (gameLogMatch) {
-      void handleGameLog(req, res, agentGameLogDirectory, gameLogMatch[1]);
+      void handleGameLog(req, res, agentGameLogDirectory, gameLogMatch[1], agentLogger);
       return;
     }
     if (name === 'api/chat/batch') {
@@ -1125,18 +1092,15 @@ function createServer({
       res.setHeader('Referrer-Policy', 'no-referrer');
       res.setHeader('X-Frame-Options', 'DENY');
     }
-    fs.readFile(path.join(base, name), (error, data) => {
-      if (error) {
-        res.writeHead(500);
-        return res.end('Read error');
-      }
-      res.writeHead(200, {
-        'Content-Type': types[path.extname(name)],
-        'Content-Length': data.length,
-        'Cache-Control': 'no-cache',
-        'X-Content-Type-Options': 'nosniff',
-      });
-      res.end(req.method === 'HEAD' ? undefined : data);
+    const media = /\.(mp3|ogg|wav|webp)$/.test(name);
+    void sendFile(req, res, path.join(base, name), {
+      type: types[path.extname(name)],
+      cache: media ? 'public, max-age=86400' : 'no-cache',
+      etag: media,
+    }).catch((error) => {
+      if (res.headersSent) return res.destroy();
+      res.writeHead(error.code === 'ENOENT' ? 404 : 500);
+      res.end('Read error');
     });
   });
   server.once('listening', () => {
@@ -1144,6 +1108,7 @@ function createServer({
   });
   server.once('close', () => {
     recordings.close();
+    void agentLogger.flush?.();
     void stories.close();
   });
   server.storyService = stories;

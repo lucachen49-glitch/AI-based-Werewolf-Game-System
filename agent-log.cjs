@@ -1,7 +1,6 @@
 'use strict';
 const fs = require('node:fs');
 const path = require('node:path');
-const { cleanSystemLogs } = require('./system-logs.cjs');
 const tasks = new Set(['speech', 'night', 'vote', 'hunter']);
 const events = new Set([
   'started',
@@ -286,35 +285,91 @@ function cleanGameLogs(directory, now = Date.now()) {
   }
 }
 
+const logQueues = new Map();
+async function retainLog(file, now) {
+  let stat, text;
+  try {
+    stat = await fs.promises.stat(file);
+    text = await fs.promises.readFile(file, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  const cutoff = now - 72 * 60 * 60 * 1000;
+  const retained = text
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((line) => {
+      try {
+        const time = Date.parse(JSON.parse(line).time);
+        return Number.isFinite(time) ? time >= cutoff : stat.mtimeMs >= cutoff;
+      } catch {
+        return stat.mtimeMs >= cutoff;
+      }
+    });
+  const next = retained.length ? retained.join('\n') + '\n' : '';
+  if (!next && stat.mtimeMs < cutoff) await fs.promises.rm(file, { force: true });
+  else if (next !== text) await fs.promises.writeFile(file, next, 'utf8');
+}
+async function cleanAgentLogs(file, gameDirectory, now) {
+  await retainLog(file, now);
+  let names;
+  try {
+    names = await fs.promises.readdir(gameDirectory);
+  } catch (error) {
+    if (error.code === 'ENOENT') return;
+    throw error;
+  }
+  const candidates = names.filter((name) => /^[a-zA-Z0-9_-]{1,80}\.jsonl$/.test(name));
+  for (let i = 0; i < candidates.length; i += 50) {
+    for (const name of candidates.slice(i, i + 50))
+      await retainLog(path.join(gameDirectory, name), now);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
 function createAgentLogger({
   file = path.join(__dirname, 'logs', 'agent-requests.jsonl'),
   gameDirectory = path.join(path.dirname(file), 'agent-games'),
 } = {}) {
   let warned = false,
-    nextCleanupAt = 0;
-  const directory = path.dirname(file);
-  return (entry) => {
-    try {
-      fs.mkdirSync(directory, { recursive: true });
-      const now = Date.now();
-      if (now >= nextCleanupAt) {
-        cleanSystemLogs({ directory, files: ['agent-requests.jsonl'], now });
-        cleanGameLogs(gameDirectory, now);
-        nextCleanupAt = now + 60 * 60 * 1000;
-      }
-      const safe = safeEntry(entry);
-      const line = JSON.stringify(safe) + '\n';
-      fs.appendFileSync(file, line, 'utf8');
-      if (safe.gameId) {
-        fs.mkdirSync(gameDirectory, { recursive: true });
-        fs.appendFileSync(path.join(gameDirectory, safe.gameId + '.jsonl'), line, 'utf8');
-      }
-    } catch {
-      if (!warned) {
-        warned = true;
-        console.error('Agent 请求诊断日志写入失败，请检查 logs 文件夹的写入权限。');
-      }
-    }
+    nextCleanupAt = 0,
+    tail = Promise.resolve();
+  const directory = path.dirname(file),
+    queueKey = path.resolve(directory);
+  const log = (entry) => {
+    const safe = safeEntry(entry),
+      line = JSON.stringify(safe) + '\n';
+    const operation = (logQueues.get(queueKey) || Promise.resolve())
+      .then(async () => {
+        await fs.promises.mkdir(directory, { recursive: true });
+        const now = Date.now();
+        if (now >= nextCleanupAt) {
+          await cleanAgentLogs(file, gameDirectory, now);
+          nextCleanupAt = now + 60 * 60 * 1000;
+        }
+        await fs.promises.appendFile(file, line, 'utf8');
+        if (safe.gameId) {
+          await fs.promises.mkdir(gameDirectory, { recursive: true });
+          await fs.promises.appendFile(
+            path.join(gameDirectory, safe.gameId + '.jsonl'),
+            line,
+            'utf8',
+          );
+        }
+      })
+      .catch(() => {
+        if (!warned) {
+          warned = true;
+          console.error('Agent 请求诊断日志写入失败，请检查 logs 文件夹的写入权限。');
+        }
+      });
+    logQueues.set(queueKey, operation);
+    tail = operation;
+    void operation.then(() => {
+      if (logQueues.get(queueKey) === operation) logQueues.delete(queueKey);
+    });
   };
+  log.flush = () => logQueues.get(queueKey) || tail;
+  return log;
 }
 module.exports = { createAgentLogger, safeEntry, cleanGameLogs };

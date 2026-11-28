@@ -1,4 +1,5 @@
 'use strict';
+const { guardedFetch } = require('./upstream-guard.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -224,6 +225,12 @@ function retryable(error) {
 }
 function normalizeFailure(error) {
   if (error instanceof SpeechError) return error;
+  if (
+    ['UPSTREAM_PRIVATE_ADDRESS', 'ERR_UPSTREAM_REDIRECT', 'ERR_UPSTREAM_UPGRADE'].includes(
+      error?.code,
+    )
+  )
+    return new SpeechError(error.status || 502, error.code, error.message);
   if (error?.name === 'AbortError') return error;
   const messages = {
     VOICE_NOT_READY: '自然语音尚未安装，请双击 setup-voice.cmd 后重试',
@@ -310,7 +317,7 @@ async function speechAudio(
   body,
   {
     signal,
-    fetchImpl = fetch,
+    fetchImpl = guardedFetch,
     synthesizeImpl = pythonSpeech,
     attemptTimeoutMs = Limits.SPEECH_ATTEMPT_TIMEOUT_MS,
   } = {},

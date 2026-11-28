@@ -121,7 +121,14 @@ function addFeed(icon, text, type = '', publicText = text) {
 
 function addSpeech(id, text) {
   text = limitSpeech(text);
-  transcript.push({ id, text, time: stamp(), round: game.round, pk: !!game.pk });
+  transcript.push({
+    id,
+    text,
+    time: stamp(),
+    round: game.round,
+    pk: !!game.pk,
+    lastWords: game.phase === 'lastWords',
+  });
   renderTranscript();
   renderSpectator();
   renderPlayers();
@@ -129,7 +136,7 @@ function addSpeech(id, text) {
 
 function syncLogs(night) {
   game.logs.slice(logCursor).forEach((l) => {
-    addFeed(l.phase === 'night' ? '☾' : '✦', l.text, 'notice');
+    if (!l.private) addFeed(l.phase === 'night' ? '☾' : '✦', l.text, 'notice');
     const e = NightfallObserver.commentary(l, /^天亮了/.test(l.text) ? night : null);
     if (e) addObserver(e);
   });
@@ -177,7 +184,7 @@ function renderStatus() {
   // eslint-disable-next-line no-unsanitized/property -- Values are escaped or come from local render helpers that escape dynamic content.
   $('aiValue').innerHTML =
     String(remote).padStart(2, '0') + ' <small>API / ' + size + ' AI</small>';
-  const stages = ['lobby', 'night', 'discussion', 'voting'];
+  const stages = ['lobby', 'night', 'lastWords', 'discussion', 'voting'];
   $('progressText').textContent =
     game.phase === 'ended' ? '已结束' : paused ? '已暂停' : '自动推进';
   $('progressBar').style.width =
@@ -216,7 +223,9 @@ function renderStatus() {
           : activeSeat === null
             ? '按规则自动推进'
             : publicNight()
-              ? '夜间角色正在秘密行动'
+              ? game.phase === 'hunter'
+                ? '正在结算出局情况'
+                : '夜间角色正在秘密行动'
               : activeSeat + 1 + ' 号正在' + (game.phase === 'discussion' ? '发言' : '行动');
   $('autoState').textContent = runError
     ? '对局已停止'
@@ -464,7 +473,7 @@ function renderTranscript() {
           '</b><small>第 ' +
           l.round +
           ' 轮 · ' +
-          (l.pk ? 'PK' : '普通') +
+          (l.lastWords ? '遗言' : l.pk ? 'PK' : '普通') +
           '发言 · ' +
           esc(l.time) +
           '</small></div><p>' +
@@ -503,7 +512,9 @@ function renderAction() {
     title = paused
       ? '对局已暂停'
       : publicNight()
-        ? '夜间角色正在秘密行动'
+        ? game.phase === 'hunter'
+          ? '正在结算出局情况'
+          : '夜间角色正在秘密行动'
         : actionText || phaseLabels[game.phase];
     detail = paused
       ? '当前已发出的请求会完成，后续行动等待你点击“继续对局”。'
@@ -512,7 +523,6 @@ function renderAction() {
   const preparation = preparedSpeech && !preparedSpeech.active ? preparedSpeech : null;
   const voting = voteBatchStatus();
   const secretNightBatch = voting?.batch.kind === 'night';
-  const hiddenBatch = secretNightBatch && publicNight();
   const currentAPI = voting?.batch || apiWaiting || agentPending || preparation?.attempt;
   let apiTitle = title,
     apiDetail = '';
@@ -542,7 +552,7 @@ function renderAction() {
     detail = hiddenNight
       ? '夜间行动正在等待处理。普通观战不会显示行动席位、角色或诊断信息。'
       : nightBatch
-        ? '所有狼人各自独立提交选择，结果收齐后按现有多数规则结算。' +
+        ? '首轮一致即定刀，否则进行第二轮确认，再按有效票多数定刀。' +
           (paused ? ' 对局已暂停，已返回结果会保留。' : '')
         : '全部有效结果收齐后，按座位顺序公布。' +
           (paused ? ' 对局已暂停，其余请求继续收票。' : '');
@@ -567,8 +577,10 @@ function renderAction() {
               ' · ' +
               elapsed +
               ' 秒。' +
-              (item.error ? ' ' + item.error.message : '') +
-              (attempt?.requestId ? ' 请求编号 ' + attempt.requestId + '。' : '') +
+              (item.error && spectatorPrefs.perspective === 'god' ? ' ' + item.error.message : '') +
+              (attempt?.requestId && spectatorPrefs.perspective === 'god'
+                ? ' 请求编号 ' + attempt.requestId + '。'
+                : '') +
               inputTokenNote(attempt)
             );
           })
@@ -598,7 +610,8 @@ function renderAction() {
           : preparation.status === 'failed'
             ? '准备请求已结束，当前人物完整播放后，将在该席位暂停并显示原因。'
             : '下一位正在等待接口返回，已等待 ' + elapsed + ' 秒。';
-      apiDetail += ' 请求编号 ' + currentAPI.requestId + '。';
+      if (spectatorPrefs.perspective === 'god')
+        apiDetail += ' 请求编号 ' + currentAPI.requestId + '。';
       detail += ' ' + apiTitle + '。' + apiDetail;
     } else {
       kicker = apiWaiting ? 'ACTION PAUSED' : 'WAITING FOR RESPONSE';
@@ -610,13 +623,15 @@ function renderAction() {
       detail = apiWaiting
         ? (hidden
             ? '夜间行动遇到接口问题，请检查配置并手动重试。'
-            : currentAPI.message + ' 本次用时 ' + elapsed + ' 秒。') +
-          ' 点击“重试当前行动”后重新请求。'
+            : (spectatorPrefs.perspective === 'god' ? currentAPI.message : '当前行动需要重试。') +
+              ' 本次用时 ' +
+              elapsed +
+              ' 秒。') + ' 点击“重试当前行动”后重新请求。'
         : (hidden
             ? '夜间秘密行动正在等待接口返回，已等待 ' + elapsed + ' 秒。'
             : '当前行动正在等待接口返回，已等待 ' + elapsed + ' 秒。') +
           (paused ? ' 对局已暂停，返回结果会保留至继续对局。' : '');
-      if (!hidden)
+      if (spectatorPrefs.perspective === 'god')
         detail += ' 请求编号 ' + currentAPI.requestId + '。' + inputTokenNote(currentAPI);
       apiTitle = title;
       apiDetail = detail;
@@ -751,7 +766,7 @@ function renderAgents() {
     .slice(0, size)
     .map(
       (p, i) =>
-        `<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i + 1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control === 'api' && p.connection === 'error' && p.connectionError ? `<p class="agent-error">${esc(p.connectionError)}${!p.key ? '；此席位未填写密钥，请补填并保存。' : ''}</p>` : ''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control === 'local' ? '规则模拟引擎' : p.model || '未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control === 'local' ? '无需网络' : p.endpoint || '未填写')}</strong></div></div>${p.control === 'api' ? `<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${({ medium: '中（medium）', high: '高（high）', xhigh: '超高（xhigh）' })[NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)]}</p><p class="agent-reasoning">历史上下文 · ${p.historyContext === 'full' ? '完整历史' : '最近两轮发言'}</p>` : ''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p, i), i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p, i), i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`,
+        `<article class="agent-card" data-agent-card="${i}" data-connection="${connectionInfo(p).state}"><div class="agent-head"><div class="agent-avatar">${avatarHTML(p)}</div><div><h3>${esc(p.name)}</h3><span class="agent-meta">${i + 1} 号位 · 独立人格 · 自动行动</span></div></div>${connectionBadge(p)}<p class="personality-preview">${esc(p.personality)}</p>${p.control === 'api' && p.connection === 'error' && p.connectionError ? `<p class="agent-error">${esc(p.connectionError)}${!p.key ? '；此席位未填写密钥，请补填并保存。' : ''}</p>` : ''}<div class="agent-fields"><div class="agent-field"><span>模型</span><strong>${esc(p.control === 'local' ? '规则模拟引擎' : p.model || '未填写')}</strong></div><div class="agent-field"><span>接口</span><strong>${esc(p.control === 'local' ? '无需网络' : p.endpoint || '未填写')}</strong></div></div>${p.control === 'api' ? `<p class="agent-reasoning">API 协议 · Responses</p><p class="agent-reasoning">推理强度 · ${{ medium: '中（medium）', high: '高（high）', xhigh: '超高（xhigh）' }[NightfallAgentRequest.normalizeReasoningEffort(p.reasoningEffort)]}</p><p class="agent-reasoning">历史上下文 · ${p.historyContext === 'full' ? '完整历史' : '最近两轮发言'}</p>` : ''}<p class="agent-voice">♫ ${esc(Voices.label(seatVoice(p, i), i))} · ${esc(Voices.styles[Voices.settings(seatVoice(p, i), i).voiceStyle].name)}</p><div class="agent-foot"><button class="avatar-edit" data-agent="${i}">✎ 形象与人格</button><button class="config-btn" data-agent="${i}">配置 Agent / 声音 →</button></div></article>`,
     )
     .join('');
 }

@@ -510,7 +510,10 @@
                   <p>神职或平民任一阵营全部出局</p>
                 </div>
               </div>
-              <div class="rule-foot">两种胜利条件同时满足时，好人获胜。平票时进入 PK 发言；再次平票则本轮无人出局。</div>
+              <div class="rule-foot">
+                两种胜利条件同时满足时，好人获胜。最高票并列时进入 PK
+                发言。再次平票或全员弃票，本轮无人出局。
+              </div>
             </div>
           </div>
         </div>
@@ -620,8 +623,8 @@
         >
         <p class="key-storage-note">
           通过 http://127.0.0.1:4173 打开时，密钥由本机游戏服务以 Windows
-          当前用户加密保存，浏览器不保存明文；直接打开 HTML
-          文件时才会保存在此浏览器本地。取消勾选并保存可删除已存密钥。
+          当前用户加密保存。新输入的密钥仅保留在当前页面内存中，刷新后由服务端引用。 直接打开 HTML
+          文件时，密钥仅在当前页面使用。取消勾选并保存可删除已存密钥。
         </p>
         <label class="full-label"
           >人物性格<textarea
@@ -674,7 +677,7 @@
                 id="rememberVoiceKeyInput"
                 type="checkbox"
                 checked
-              />在此浏览器记住语音密钥（明文保存在本地）</label
+              />在本机加密记住语音密钥（重启后自动恢复）</label
             >
           </div>
           <div class="form-row">
@@ -738,6 +741,7 @@
     <script src="spectator.js"></script>
     <script src="manor.js"></script>
     <script src="character-intros.js"></script>
+    <script src="scenario-samples.js"></script>
     <script src="scenario.js"></script>
     <script src="story-player.js"></script>
     <script src="story-game.js"></script>

@@ -193,6 +193,19 @@ async function start() {
   await autoTask;
 }
 
+function addDiscussionCommentary() {
+  if (game.phase !== 'discussion') return;
+  const firstSeat = game.speechOrder[0] + 1;
+  const introduction =
+    '现在进入白天讨论，本轮从 ' + firstSeat + ' 号玩家开始，存活玩家按座位顺序顺时针依次发言。';
+  addObserver({
+    kind: 'discussion',
+    round: game.round,
+    publicText: introduction + '公开发言只是玩家的主张，请结合票型判断。',
+    godText: introduction + '留意他们如何表达信息、隐藏身份或试探对手。',
+  });
+}
+
 async function runGame(token) {
   try {
     while (token === epoch) {
@@ -204,7 +217,14 @@ async function runGame(token) {
       }
       if (!(await waitForTurn(token)) || token !== epoch) return;
       if (game.phase === 'night') await runNight(token);
-      else if (game.phase === 'discussion') {
+      else if (game.phase === 'lastWords') {
+        await aiSpeeches(false, token);
+        if (token !== epoch || !(await waitForTurn(token))) return;
+        game.finishLastWords();
+        syncLogs();
+        addDiscussionCommentary();
+        renderAll();
+      } else if (game.phase === 'discussion') {
         await aiSpeeches(false, token);
         if (token !== epoch || !(await waitForTurn(token))) return;
         game.openVoting();
@@ -242,12 +262,12 @@ async function takeTurn(id, task, text, token, extra = {}, preparation = null) {
   actionText = text;
   renderAll();
   while (token === epoch) {
-    const signature = connectionSignature(profiles[id]);
+    const signature = speechConfigSignature(profiles[id]);
     const result = await decision(id, task, extra, preparation);
     preparation = null;
     if (token !== epoch || !(await waitForTurn(token, 0))) return null;
     // A successful response held during pause still belongs to the old configuration.
-    if ((decisionConfigs.get(result) || signature) !== connectionSignature(profiles[id])) {
+    if ((decisionConfigs.get(result) || signature) !== speechConfigSignature(profiles[id])) {
       if (
         !(await pauseAgentAction(
           id,
@@ -271,15 +291,16 @@ async function takeTurn(id, task, text, token, extra = {}, preparation = null) {
 function localDecision(id, task, extra = {}) {
   const p = game.players[id],
     c = { ...game.context(id), checks: game.knowledge[id] || {} };
-  let targets = game.alive().filter((x) => x.id !== id);
-  if (p.role === '狼人' && task === 'night') targets = game.alive();
-  if (p.role === '守卫' && task === 'night')
-    targets = game.alive().filter((x) => x.id !== game.lastGuard);
-  if (game.pk && task === 'vote') targets = targets.filter((x) => game.pk.includes(x.id));
+  const targets = game.legalTargets(id, task).map((seat) => game.players[seat - 1]);
   const knownWolf = Object.entries(c.checks).find(
     ([target, result]) => result === '狼人' && game.players[target].alive,
   );
-  let target = knownWolf && p.role !== '狼人' ? +knownWolf[0] : (game.pick(targets)?.id ?? null);
+  let target =
+    knownWolf && targets.some((p) => p.id === Number(knownWolf[0]))
+      ? +knownWolf[0]
+      : (game.pick(targets)?.id ?? null);
+  if (task === 'night' && p.role === '狼人' && extra.firstRoundChoices)
+    return { target: game.wolfTarget(extra.firstRoundChoices) };
   if (task === 'vote' && p.role === '狼人') {
     const nonWolf = targets.filter((x) => x.role !== '狼人');
     target = game.pick(nonWolf)?.id ?? target;
@@ -362,7 +383,7 @@ async function apiCall(
       body: JSON.stringify({
         endpoint: profile.endpoint,
         model: profile.model,
-        apiKey: profile.key,
+        ...requestCredential(profile),
         messages,
         maxTokens,
         purpose: attempt ? 'game-action' : 'connection-test',
@@ -427,8 +448,7 @@ async function apiCall(
   } finally {
     clearTimeout(timer);
     activeRequestControllers.delete(controller);
-    if (activeRequest === controller)
-      activeRequest = [...activeRequestControllers].at(-1) || null;
+    if (activeRequest === controller) activeRequest = [...activeRequestControllers].at(-1) || null;
   }
 }
 
@@ -704,6 +724,12 @@ function buildAgentContext(id, task, extra = {}) {
       includeAllPublicEvents: decision,
     },
   );
+  if (task === 'speech' && game.phase === 'lastWords') context.lastWords = true;
+  if (task === 'night' && game.players[id].role === '狼人' && extra.firstRoundChoices) {
+    context.firstRoundChoices = game
+      .wolfChoices(extra.firstRoundChoices)
+      .map((p) => ({ seat: p.id + 1, target: p.target === null ? null : p.target + 1 }));
+  }
   context.allowedTargets = game.legalTargets(id, task);
   if (task === 'night' && game.players[id].role === '女巫') {
     const options = game.witchOptions(extra.victim ?? null);
@@ -719,11 +745,16 @@ function agentMessages(id, profile, task, context) {
   const role = game.players[id].role;
   const schema =
     task === 'speech'
-      ? '像真人朋友坐在桌边玩狼人杀，用自然口语和适度停顿表达怀疑、自信或紧张，避免报告腔、重复模板、括号动作或朗读标签。平常控制在 300—500 字左右，需要解释复杂推理时可以展开，最多 1400 个 Unicode 字符。只返回 {"speech":"中文发言"}'
+      ? (context.lastWords ? '现在是你的遗言。' : '') +
+        '像真人朋友坐在桌边玩狼人杀，用自然口语和适度停顿表达怀疑、自信或紧张，避免报告腔、重复模板、括号动作或朗读标签。平常控制在 300—500 字左右，需要解释复杂推理时可以展开，最多 1400 个 Unicode 字符。只返回 {"speech":"中文发言"}'
       : task === 'night' && role === '女巫'
-        ? '只返回 {"save":true或false,"poison":座位号或null}。只依据 context 中当前可见的狼刀目标、药剂状态和合法目标行动。一晚最多使用一瓶药。'
+        ? '只返回 {"save":true或false,"poison":座位号或null}。save 表示是否对 context.tonightVictim 使用解药，合法性由 context.nightRules.canSave 决定；canSave 为 true 表示允许救当前狼刀目标，若目标是女巫本人则允许自救，但不代表必须用药。poison 若选择座位号，必须来自 context.allowedTargets；null 表示不用毒。一晚最多使用一瓶药。'
         : task === 'night' && role === '狼人'
-          ? '只返回 {"target":目标座位号或null}。你要独立选择狼刀目标，不得声称或推测队友本夜选择。可选择任何存活玩家，包括自己和狼人队友，也可弃权。'
+          ? '只返回 {"target":目标座位号或null}。' +
+            (context.firstRoundChoices
+              ? '请参考狼队首轮选择，提交第二轮确认。'
+              : '你要独立选择狼刀目标，不得声称或推测队友本夜选择。') +
+            '可选择任何存活玩家，包括自己和狼人队友，也可弃权。'
           : task === 'night' && role === '守卫'
             ? '只返回 {"target":目标座位号或null}。按 context.allowedTargets 选择守护目标，不能连续守护同一人，也可空守。'
             : task === 'night' && role === '预言家'
@@ -734,7 +765,7 @@ function agentMessages(id, profile, task, context) {
   return [
     {
       role: 'system',
-      content: `你是狼人杀玩家。你的人格：${profile.personality}。本局规则：${Nightfall.RULES}。目标只能从 context.allowedTargets 选择，或使用 null 放弃行动。遵守规则，不虚构私有信息。狼人阵营需隐藏身份，好人需推理找狼。游戏采用屠边规则：狼人全部出局好人胜，神职或平民任一阵营全部出局狼人胜，双条件同时满足时好人胜。数字目标使用1开始的座位号。${schema}。输出必须是一个合法的 JSON 对象，不要附加解释、分析、代码块或多个候选。字符串中的双引号、反斜杠和换行必须使用 JSON 转义。只在最终答案中输出本次行动。`,
+      content: `你是狼人杀玩家。你的人格：${profile.personality}。本局规则：${Nightfall.RULES}。凡需要选择座位目标的行动，目标只能从 context.allowedTargets 选择，或使用 null 放弃行动。遵守规则，不虚构私有信息。狼人阵营需隐藏身份，好人需推理找狼。游戏采用屠边规则：狼人全部出局好人胜，神职或平民任一阵营全部出局狼人胜，双条件同时满足时好人胜。数字目标使用1开始的座位号。${schema}。输出必须是一个合法的 JSON 对象，不要附加解释、分析、代码块或多个候选。字符串中的双引号、反斜杠和换行必须使用 JSON 转义。只在最终答案中输出本次行动。`,
     },
     { role: 'user', content: JSON.stringify({ task, context }) },
   ];
@@ -823,6 +854,7 @@ function validateAgentDecision(id, task, text, context, extra = {}) {
     if (result.poison !== null && !context.allowedTargets.includes(result.poison))
       throw invalid('女巫行动不符合当前规则', 'INVALID_ACTION', 'POISON_NOT_ALLOWED', 'poison');
   } else if (task !== 'speech') {
+    if (task === 'hunter' && result.target === undefined) result.target = null;
     if (result.target === undefined)
       throw invalid('行动目标格式错误', 'INVALID_ACTION', 'TARGET_REQUIRED', 'target');
     if (result.target !== null && !Number.isInteger(result.target))
@@ -848,7 +880,7 @@ function validateAgentDecision(id, task, text, context, extra = {}) {
 
 async function requestAgentDecision(id, task, extra, turnEpoch, preparation = null) {
   const profile = profiles[id],
-    signature = connectionSignature(profile);
+    signature = speechConfigSignature(profile);
   const attempt = startAgentAttempt(id, task, preparation);
   try {
     setConnection(profile, 'testing');
@@ -872,7 +904,7 @@ async function requestAgentDecision(id, task, extra, turnEpoch, preparation = nu
       nightOptions: context.nightRules,
     });
     if (turnEpoch !== epoch) return { cancelled: true, attempt };
-    if (signature !== connectionSignature(profiles[id]))
+    if (signature !== speechConfigSignature(profiles[id]))
       throw Object.assign(Error('接口配置已修改，请重试当前行动。'), {
         code: 'AGENT_CONFIG_CHANGED',
       });
@@ -893,7 +925,7 @@ async function requestAgentDecision(id, task, extra, turnEpoch, preparation = nu
       );
     else if (
       attempt.stopCode === 'AGENT_CONFIG_CHANGED' ||
-      signature !== connectionSignature(profiles[id])
+      signature !== speechConfigSignature(profiles[id])
     )
       error = Object.assign(Error('接口配置已修改，请重试当前行动。'), {
         code: 'AGENT_CONFIG_CHANGED',
@@ -922,13 +954,14 @@ function localStoryDecision(id, task, extra) {
   return result;
 }
 
-async function collectWolfChoices(actors, token, victim) {
+async function collectWolfChoices(actors, token, victim, firstRoundChoices = null) {
   if (!actors.length) return {};
   const batch = {
     kind: 'night',
     epoch: token,
     round: game.round,
     victim,
+    firstRoundChoices,
     startedAt: Date.now(),
     items: {},
     controllers: new Set(),
@@ -939,11 +972,13 @@ async function collectWolfChoices(actors, token, victim) {
   voteBatch = batch;
   actionText = '狼人 · 正在独立提交狼刀选择';
   for (const player of actors) {
-    const context = JSON.parse(JSON.stringify(buildAgentContext(player.id, 'night', { victim })));
+    const context = JSON.parse(
+      JSON.stringify(buildAgentContext(player.id, 'night', { victim, firstRoundChoices })),
+    );
     const localResult =
       profiles[player.id].control === 'api'
         ? null
-        : localStoryDecision(player.id, 'night', { victim });
+        : localStoryDecision(player.id, 'night', { victim, firstRoundChoices });
     batch.items[player.id] = {
       id: player.id,
       context,
@@ -1021,8 +1056,18 @@ async function runNight(token = epoch) {
       if (token !== epoch) return;
     }
     if (role === '狼人') {
-      const wolfChoices = await collectWolfChoices(actors, token, victim);
-      if (wolfChoices === null) return;
+      let wolfChoices = await collectWolfChoices(actors, token, victim);
+      if (wolfChoices === null || token !== epoch) return;
+      if (!game.wolfConsensus(wolfChoices)) {
+        const event = NightfallObserver.nightAction(
+          role,
+          { round: game.round, wolfChoices: game.wolfChoices(wolfChoices), confirming: true },
+          actors.map((p) => p.id),
+        );
+        addObserver(event);
+        wolfChoices = await collectWolfChoices(actors, token, victim, wolfChoices);
+        if (wolfChoices === null || token !== epoch) return;
+      }
       Object.assign(choices, wolfChoices);
       victim = game.wolfTarget(choices);
     } else
@@ -1060,15 +1105,7 @@ async function runNight(token = epoch) {
   const result = game.resolveNight(choices, victim);
   actionText = '天亮了，正在公布昨夜结果';
   syncLogs({ ...result, narrated: true });
-  if (game.phase === 'discussion')
-    addObserver({
-      kind: 'discussion',
-      round: game.round,
-      publicText:
-        '现在进入白天讨论，存活玩家按座位顺序依次发言。公开发言只是玩家的主张，请结合票型判断。',
-      godText:
-        '现在进入白天讨论，存活玩家按座位顺序依次发言。留意他们如何表达信息、隐藏身份或试探对手。',
-    });
+  addDiscussionCommentary();
   renderAll();
 }
 
@@ -1193,6 +1230,14 @@ function retryVoteBatch() {
     item.result = null;
     item.signature = speechConfigSignature(profiles[item.id]);
     item.attempt = null;
+    const task = state.batch.kind;
+    const extra = { victim: state.batch.victim, firstRoundChoices: state.batch.firstRoundChoices };
+    // Keep the public information frozen at batch start, including on a model change.
+    if (profiles[item.id].control !== 'api') {
+      const result = localStoryDecision(item.id, task, extra);
+      item.localResult =
+        task === 'vote' ? { target: game.normalizedVote(item.id, result.target) } : result;
+    }
   }
   if (state.batch.errorPause) {
     state.batch.errorPause = false;
@@ -1306,7 +1351,7 @@ async function submitVoteItems(batch, items) {
           requests.push({
             endpoint: profile.endpoint,
             model: profile.model,
-            apiKey: profile.key,
+            ...requestCredential(profile),
             messages: seatMessages,
             maxTokens: Limits.ACTION_OUTPUT_MAX_TOKENS,
             reasoningEffort: NightfallAgentRequest.normalizeReasoningEffort(
@@ -1489,7 +1534,7 @@ async function collectVotes(token) {
   actionText = batch.kind === 'night' ? '狼人 · 正在独立提交狼刀选择' : '公开投票 · 正在同时收票';
   // Capture every seat before the first asynchronous operation or returned vote.
   for (const player of game.alive()) {
-    if (game.pk?.includes(player.id)) continue;
+    if (!game.canVote(player.id)) continue;
     const context = JSON.parse(JSON.stringify(buildAgentContext(player.id, 'vote')));
     const target = game.normalizedVote(player.id, localStoryDecision(player.id, 'vote', {}).target);
     batch.items[player.id] = {
@@ -1527,7 +1572,7 @@ async function collectVotes(token) {
           .alive()
           .map((player) => [
             player.id,
-            game.pk?.includes(player.id) ? null : batch.items[player.id].result.target,
+            !game.canVote(player.id) ? null : batch.items[player.id].result.target,
           ]),
       );
       cancelVoteBatch();
@@ -1544,7 +1589,7 @@ async function collectVotes(token) {
 async function vote(token = epoch) {
   votePresentation = {
     states: Object.fromEntries(
-      game.alive().map((p) => [p.id, game.pk?.includes(p.id) ? 'excluded' : 'pending']),
+      game.alive().map((p) => [p.id, !game.canVote(p.id) ? 'excluded' : 'pending']),
     ),
     votes: {},
     counts: {},
@@ -1552,7 +1597,7 @@ async function vote(token = epoch) {
   const votes = await collectVotes(token);
   if (!votes || token !== epoch) return;
   for (const p of game.alive()) {
-    if (game.pk?.includes(p.id)) continue;
+    if (!game.canVote(p.id)) continue;
     votePresentation.votes[p.id] = votes[p.id];
     votePresentation.states[p.id] = 'revealed';
     if (votes[p.id] != null)
@@ -1579,12 +1624,6 @@ async function hunter(token = epoch) {
   if (result === null || !(await waitForTurn(token))) return;
   game.shoot(result.target ?? null);
   syncLogs();
-  if (game.phase === 'discussion')
-    addObserver({
-      kind: 'discussion',
-      round: game.round,
-      publicText: '技能结算完成，现在请存活玩家依次发言。',
-      godText: '技能结算完成，现在请存活玩家依次发言。',
-    });
+  addDiscussionCommentary();
   renderAll();
 }
