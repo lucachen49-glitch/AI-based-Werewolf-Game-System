@@ -41,21 +41,47 @@ function privateAddress(address) {
 }
 function blocked() {
   return Object.assign(
-    Error('上游地址解析到本机或私有网络，请检查地址或启用 NIGHTFALL_ALLOW_LOCAL_UPSTREAM=1。'),
+    Error(
+      '上游地址属于受限网络。本机模型需启用 NIGHTFALL_ALLOW_LOCAL_UPSTREAM=1，局域网模型需单独允许其地址。',
+    ),
     { status: 400, code: 'UPSTREAM_PRIVATE_ADDRESS' },
   );
 }
-function connectionOptions(url, { allowLoopback = allowLocal(), lookup = dns.lookup } = {}) {
+function literalAddress(value) {
+  const address = value.replace(/^\[|\]$/g, '').split('%')[0];
+  return net.isIP(address) === 6
+    ? new URL('http://[' + address + ']').hostname.slice(1, -1)
+    : address;
+}
+function connectionOptions(
+  url,
+  {
+    allowLoopback = allowLocal(),
+    privateUpstreams = process.env.NIGHTFALL_ALLOWED_PRIVATE_UPSTREAMS || '',
+    lookup = dns.lookup,
+  } = {},
+) {
   const hostname = url.hostname.replace(/^\[|\]$/g, '');
-  if (net.isIP(hostname) && !allowLoopback && privateAddress(hostname)) throw blocked();
+  const allowedPrivate = new Set(
+    privateUpstreams
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => net.isIP(value))
+      .map(literalAddress),
+  );
+  const allowed = (value) => {
+    if (!privateAddress(value)) return true;
+    const address = literalAddress(value);
+    if (address === '::1' || /^127\./.test(address) || /^::ffff:7f[0-9a-f]{2}:/.test(address))
+      return allowLoopback;
+    return allowedPrivate.has(address);
+  };
+  if (net.isIP(hostname) && !allowed(hostname)) throw blocked();
   return {
     lookup(host, options, callback) {
       lookup(host, { ...options, all: true }, (error, addresses) => {
         if (error) return callback(error);
-        if (
-          !addresses.length ||
-          (!allowLoopback && addresses.some((item) => privateAddress(item.address)))
-        )
+        if (!addresses.length || addresses.some((item) => !allowed(item.address)))
           return callback(blocked());
         // These checked addresses are returned directly to the connecting socket.
         if (options.all) callback(null, addresses);

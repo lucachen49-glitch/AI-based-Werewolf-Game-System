@@ -24,6 +24,52 @@ const {
   settle,
 } = require('./test-support/app-harness.cjs');
 
+test('剪辑稿只上传待同步条目，失败后保留新版并恢复旧剪辑稿队列', async () => {
+  const { context, saved } = setup(new Map(), false);
+  const read = (code) => vm.runInContext(code, context);
+  vm.runInContext(fs.readFileSync('recording.js', 'utf8'), context);
+  context.AbortSignal = AbortSignal;
+  const id = '00000000-0000-4000-8000-000000000000';
+  const sent = [];
+  let offline = false;
+  context.fetch = async (_url, options) => {
+    const { entries } = JSON.parse(options.body);
+    sent.push(entries);
+    if (offline) throw Error('offline');
+    return { ok: true, json: async () => ({}) };
+  };
+  context.recordingId = id;
+  read(`activeRecording={id:recordingId,transcriptEntries:[]};`);
+  const first = read("recordingTranscriptBegin({text:'第一句'})");
+  await read('activeRecording.transcriptQueue');
+  offline = true;
+  context.firstEntry = first;
+  read("recordingTranscriptUpdate(firstEntry,{speechStatus:'played'})");
+  await read('activeRecording.transcriptQueue');
+  assert.match(read('recordingTranscriptStatus(recordingId)'), /1 条剪辑稿待同步/);
+  const pending = JSON.parse(saved.get('nightfall-recording-transcript-pending-v1'));
+  assert.equal(pending[id].entries[0].syncRevision, 2);
+  offline = false;
+  await read('recordingFlushPending()');
+  read("recordingTranscriptBegin({text:'第二句'})");
+  await read('activeRecording.transcriptQueue');
+  assert.deepEqual(
+    sent.map((entries) => entries.map((entry) => entry.text)),
+    [['第一句'], ['第一句'], ['第一句'], ['第二句']],
+  );
+  const legacy = Array.from({ length: 33 }, (_, i) => ({ id: 'legacy-' + i, text: '旧剪辑稿' }));
+  saved.set(
+    'nightfall-recording-transcript-pending-v1',
+    JSON.stringify({ [id]: { entries: legacy } }),
+  );
+  await read('recordingFlushPending()');
+  assert.deepEqual(
+    sent.slice(-2).map((entries) => entries.length),
+    [32, 1],
+  );
+  assert.equal(read('recordingTranscriptStatus(recordingId)'), '');
+});
+
 test('实际语音与字幕完整播放，准备请求取消不停止音频且录屏对白按实际播放记录', async (t) => {
   const h = speechPipeline(t, { actors: [0, 1], realPlayback: true }),
     { context, read, chat } = h;

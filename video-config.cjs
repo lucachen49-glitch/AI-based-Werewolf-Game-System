@@ -57,7 +57,8 @@ function createVideoConfigStore(
     async save(body) {
       const provider = normalizeVideoBase(body?.provider || PROVIDER);
       const old = await read();
-      let encryptedKey = old?.encryptedKey;
+      let encryptedKey =
+        old && normalizeVideoBase(old.provider) === provider ? old.encryptedKey : null;
       if (body?.apiKey) {
         if (typeof body.apiKey !== 'string' || !/^\S{8,8192}$/.test(body.apiKey.trim()))
           throw new StoryError(400, 'INVALID_VIDEO_KEY', '请填写有效的视频专用密钥');

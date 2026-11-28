@@ -110,6 +110,71 @@ test('凭据解析规范化端点，临时密钥优先，席位和端点变更�
   for (const seat of [0, 13, '1', null, 1.5])
     await assert.rejects(resolve({ profileSeat: seat }), { code: 'INVALID_PROFILE_SEAT' });
 });
+
+test(
+  '席位密钥跟随等价地址，跨地址保存时清除旧聊天和语音密钥',
+  { skip: process.platform !== 'win32' },
+  async (t) => {
+    const store = createAgentConfigStore(path.join(await temporary(t), 'profiles.json'));
+    const input = profiles();
+    Object.assign(input[0], {
+      endpoint: 'https://agent.example',
+      key: 'old-agent-key',
+      voiceEndpoint: 'https://voice.example',
+      voiceKey: 'old-voice-key',
+    });
+    await store.save(input);
+    Object.assign(input[0], {
+      endpoint: 'https://agent.example/v1/responses',
+      voiceEndpoint: 'https://voice.example/v1/audio/speech',
+      key: '',
+      voiceKey: '',
+    });
+    await store.save(input);
+    assert.equal((await store.credential(1)).apiKey, 'old-agent-key');
+    assert.equal((await store.credential(1, 'voice')).apiKey, 'old-voice-key');
+    Object.assign(input[0], {
+      endpoint: 'https://new.example',
+      voiceEndpoint: 'https://new-voice.example',
+      key: 'old-agent-key',
+    });
+    await store.save(input);
+    assert.equal((await store.credential(1)).apiKey, '');
+    assert.equal((await store.credential(1, 'voice')).apiKey, '');
+    input[0].key = 'new-agent-key';
+    await store.save(input);
+    assert.equal((await store.credential(1)).apiKey, 'new-agent-key');
+  },
+);
+
+test('本机上游开关仅允许回环，局域网需要逐个允许已校验的地址', async () => {
+  const options = { allowLoopback: true, privateUpstreams: '' };
+  assert.doesNotThrow(() => connectionOptions(new URL('http://127.0.0.1'), options));
+  assert.doesNotThrow(() => connectionOptions(new URL('http://[::1]'), options));
+  assert.throws(() => connectionOptions(new URL('https://192.168.1.2'), options), {
+    code: 'UPSTREAM_PRIVATE_ADDRESS',
+  });
+  const destination = new URL('https://model.example');
+  const check = (addresses, privateUpstreams) =>
+    new Promise((resolve, reject) =>
+      connectionOptions(destination, {
+        ...options,
+        privateUpstreams,
+        lookup: (_name, _options, cb) =>
+          cb(
+            null,
+            addresses.map((address) => ({ address, family: 4 })),
+          ),
+      }).lookup(destination.hostname, { all: true }, (error, result) =>
+        error ? reject(error) : resolve(result),
+      ),
+    );
+  await assert.rejects(check(['192.168.1.2'], ''), { code: 'UPSTREAM_PRIVATE_ADDRESS' });
+  assert.equal((await check(['192.168.1.2'], '192.168.1.2'))[0].address, '192.168.1.2');
+  await assert.rejects(check(['192.168.1.2', '192.168.1.3'], '192.168.1.2'), {
+    code: 'UPSTREAM_PRIVATE_ADDRESS',
+  });
+});
 test('配置 GET 和 POST、聊天、批量行动、语音及工坊入口使用公开凭据契约', async (t) => {
   const input = profiles();
   input[0].key = 'saved-agent';

@@ -39,6 +39,75 @@ test('女巫行动提示区分解药合法性与毒药目标限制', () => {
   assert.match(messages[0].content, /poison.*必须来自 context\.allowedTargets/);
 });
 
+test('第三天女巫的发言请求带入已结算的两次用药，刀口和用药记录按角色隔离', async () => {
+  const { context } = setup(new Map(), false);
+  prepareAuto(context, 12);
+  vm.runInContext(
+    `
+      game.start();
+      const replayRoles = ['女巫','守卫','狼人','平民','平民','狼人','狼人','狼人','猎人','平民','平民','预言家'];
+      game.players.forEach((player, id) => { player.role = replayRoles[id]; });
+      game.resolveNight({ 0: { save: true }, 1: { target: 1 } }, 9);
+      game.openVoting();
+      game.resolveVotes({ 0: 11 });
+      game.addLastWord(11, '我是预言家。');
+      game.finishLastWords();
+      game.resolveNight({ 1: { target: 5 } }, 9);
+      game.openVoting();
+      game.resolveVotes({ 0: 4 });
+      game.addLastWord(4, '我是平民。');
+      game.finishLastWords();
+      profiles[0].endpoint = 'https://example.test';
+      profiles[0].model = 'witch';
+    `,
+    context,
+  );
+  const view = (id, task, extra = {}) =>
+    JSON.parse(
+      vm.runInContext(
+        `JSON.stringify(buildAgentContext(${id}, ${JSON.stringify(task)}, ${JSON.stringify(extra)}))`,
+        context,
+      ),
+    );
+  const saved = { round: 1, type: 'save', target: 10 };
+  const poisoned = { round: 3, type: 'poison', target: 6 };
+  const night = view(0, 'night', { victim: 0 });
+  assert.deepEqual(night.potionHistory, [saved]);
+  assert.equal(Object.hasOwn(night, 'tonightVictim'), false);
+  vm.runInContext('game.resolveNight({ 0: { poison: 5 }, 1: { target: 0 } }, 0)', context);
+
+  let messages;
+  context.fetch = async (url, options) => {
+    if (url !== '/api/chat') return { ok: true };
+    ({ messages } = JSON.parse(options.body));
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ choices: [{ message: { content: '{"speech":"我今天投7号。"}' } }] }),
+    };
+  };
+  const outcome = await vm.runInContext("requestAgentDecision(0, 'speech', {}, epoch)", context);
+  assert.equal(outcome.action?.speech, '我今天投7号。', outcome.error?.message);
+  assert.match(messages[0].content, /以 context\.potionHistory 和 context\.potions 为准/);
+  const speech = JSON.parse(messages[1].content).context;
+  assert.equal(speech.round, 3);
+  assert.deepEqual(speech.potions, { save: false, poison: false });
+  assert.deepEqual(speech.potionHistory, [saved, poisoned]);
+  assert.equal(Object.hasOwn(speech, 'tonightVictim'), false);
+  for (const task of ['speech', 'vote', 'night']) {
+    assert.equal(Object.hasOwn(view(2, task), 'potionHistory'), false);
+  }
+  assert.deepEqual(speech.publicEvents, view(2, 'speech').publicEvents);
+  assert.match(speech.publicEvents.at(-1).text, /6 号玩家昨夜出局/);
+
+  vm.runInContext('game.openVoting()', context);
+  assert.deepEqual(view(0, 'vote').potionHistory, [saved, poisoned]);
+  vm.runInContext('game.resolveVotes({ 2: 0 })', context);
+  const lastWords = view(0, 'speech');
+  assert.equal(lastWords.lastWords, true);
+  assert.deepEqual(lastWords.potionHistory, [saved, poisoned]);
+});
+
 test('完整流程重置取消请求，API 故障等待修复后继续终局', async () => {
   const { context } = setup();
   prepareAuto(context, 6);

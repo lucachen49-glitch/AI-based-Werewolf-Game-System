@@ -140,6 +140,9 @@ function createRecordingAPI({
     const allowedKind = entry.kind === 'commentary' ? 'commentary' : 'dialogue';
     return {
       id: entry.id.slice(0, 100),
+      ...(Number.isSafeInteger(entry.syncRevision) && entry.syncRevision > 0
+        ? { syncRevision: entry.syncRevision }
+        : {}),
       kind: allowedKind,
       seat: Number.isInteger(entry.seat) && entry.seat >= 0 && entry.seat < 12 ? entry.seat : null,
       name: typeof entry.name === 'string' ? entry.name.slice(0, 120) : '',
@@ -299,34 +302,48 @@ function createRecordingAPI({
     const task = queue.then(async () => {
       const source = raw(job),
         target = output(job),
-        temp = target + '.part.mp4';
+        temp = target + '.part.mp4',
+        merged = source + '.part';
+      let rawComplete = false;
       try {
         const parts = await chunks(job);
-        if (
-          !(await fs.stat(source).then(
-            (s) => s.size > 0,
-            () => false,
-          ))
-        ) {
+        const sourceBytes = await fs.stat(source).then(
+          (stat) => stat.size,
+          (error) => {
+            if (error.code === 'ENOENT') return 0;
+            throw error;
+          },
+        );
+        if (sourceBytes > 0) {
+          let partsBytes = 0;
+          for (const part of parts) partsBytes += (await fs.stat(path.join(dir(job), part))).size;
+          rawComplete = !parts.length || sourceBytes === partsBytes;
+        }
+        if (!rawComplete) {
           if (!parts.length) {
             await save(job, { status: 'empty', reason: '未收到可保存的录制片段。' });
             return;
           }
-          await pipeline(Readable.from(readParts(job, parts)), createWriteStream(source + '.part'));
-          await fs.rename(source + '.part', source);
+          await pipeline(Readable.from(readParts(job, parts)), createWriteStream(merged));
+          await fs.rename(merged, source);
+          rawComplete = true;
         }
         await transcode(source, temp, job);
         await fs.rename(temp, target);
-        await save(job, { status: 'ready', hasRaw: true });
+        await save(job, {
+          status: 'ready',
+          hasRaw: true,
+          ...(parts.length
+            ? { chunks: parts.length, complete: job.complete && parts.length === job.chunks }
+            : {}),
+        });
         await fs.rm(source, { force: true }).catch(() => {});
         for (const part of parts)
           await fs.rm(path.join(dir(job), part), { force: true }).catch(() => {});
       } catch {
         await fs.rm(temp, { force: true }).catch(() => {});
-        const hasRaw = await fs.stat(source).then(
-          (s) => s.size > 0,
-          () => false,
-        );
+        await fs.rm(merged, { force: true }).catch(() => {});
+        const hasRaw = rawComplete;
         const reason =
           job.reason ||
           (hasRaw ? 'MP4 合成失败，已保留原始 WebM。' : '暂时无法合并，已保留收到的录制片段。');
@@ -563,6 +580,8 @@ function createRecordingAPI({
             story: story === true,
             complete: false,
             chunks: 0,
+            transcriptEntries: [],
+            transcriptCount: 0,
             status: 'recording',
             liveUntil: Date.now() + leaseMs,
             filename:
@@ -610,14 +629,23 @@ function createRecordingAPI({
       if (req.method === 'PUT' && action === 'transcript') {
         const body = await readJSON(req, 2 * 1024 * 1024),
           incoming = Array.isArray(body?.entries) ? body.entries : [];
-        const current = await readTranscript(job),
-          merged = new Map(current.map((entry) => [entry.id, entry]));
-        for (const entry of incoming) {
-          const normalized = normalizeTranscriptEntry(entry);
-          if (normalized) merged.set(normalized.id, normalized);
-        }
-        await writeTranscript(job, [...merged.values()]);
-        return sendJSON(res, 200, { recordingId: job.id, transcriptCount: job.transcriptCount });
+        const transcriptCount = await exclusive(job, async () => {
+          const current = await readTranscript(job);
+          const merged = new Map(current.map((entry) => [entry.id, entry]));
+          let changed = false;
+          for (const entry of incoming) {
+            const next = normalizeTranscriptEntry(entry);
+            if (!next) continue;
+            const previous = merged.get(next.id);
+            if (previous?.syncRevision && previous.syncRevision >= (next.syncRevision || 0))
+              continue;
+            merged.set(next.id, next);
+            changed = true;
+          }
+          if (changed) await writeTranscript(job, [...merged.values()]);
+          return job.transcriptCount;
+        });
+        return sendJSON(res, 200, { recordingId: job.id, transcriptCount });
       }
       if (req.method === 'PUT' && /^chunks\/\d{1,7}$/.test(action)) {
         await exclusive(job, () => putChunk(req, job, Number(action.slice(7))));

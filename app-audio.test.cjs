@@ -944,7 +944,7 @@ test('遗言后入夜、猎人结算终局和 PK 发言均按各自阶段处理�
       context.exileId = hunterExiled ? 6 : 8;
       read('game.resolveVotes(Object.fromEntries(game.alive().map(p=>[p.id,exileId])))');
       if (hunterExiled) {
-        await read('hunter(epoch)');
+        await read('settleElimination(epoch)');
         assert.equal(read('game.phase'), 'lastWords');
       }
       await read('runGame(epoch)');
@@ -967,7 +967,7 @@ test('遗言后入夜、猎人结算终局和 PK 发言均按各自阶段处理�
       game.resolveNight({}, 6);
       localDecision = () => ({ target: 0 });
     `);
-    await read('hunter(epoch)');
+    await read('settleElimination(epoch)');
     assert.equal(read('game.phase'), 'ended');
     assert.equal(read('game.winner'), '好人');
     assert.equal(read("observerEvents.filter(e=>e.kind==='discussion').length"), 0);

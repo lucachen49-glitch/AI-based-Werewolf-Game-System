@@ -129,6 +129,37 @@ test('夜间展示计划无副作用，固定狼刀不再次随机且与结算�
   assert.equal(result.saved, true);
   assert.equal(result.poisoned, null);
   assert.deepEqual(result.deaths, [6]);
+  assert.deepEqual(g.context(5).potionHistory, [{ round: 1, type: 'save', target: 7 }]);
+});
+
+test('女巫用药记录只包含实际扣药，返回独立副本并在重开时清空', () => {
+  const g = fixed();
+  const witch = 3;
+  const save = { [witch]: { save: true, poison: null } };
+  assert.deepEqual(g.context(witch).potionHistory, []);
+  g.nightPlan(save, 4);
+  g.nightPlan(save, 4);
+  assert.deepEqual(g.context(witch).potionHistory, []);
+  g.resolveNight({ [witch]: { save: true, poison: 99 } }, null);
+  assert.deepEqual(g.context(witch).potionHistory, []);
+
+  g.openVoting();
+  g.resolveVotes();
+  g.resolveNight(save, 4);
+  const expected = [{ round: 2, type: 'save', target: 5 }];
+  const history = g.context(witch).potionHistory;
+  assert.deepEqual(history, expected);
+  history[0].target = 6;
+  history.pop();
+  assert.deepEqual(g.context(witch).potionHistory, expected);
+  assert.equal(Object.hasOwn(g.context(0), 'potionHistory'), false);
+  assert.deepEqual(g.context(witch).publicEvents, g.context(0).publicEvents);
+  assert.match(g.context(0).publicEvents.at(-1).text, /平安夜/);
+
+  g.reset();
+  g.start();
+  const nextWitch = g.players.find((player) => player.role === '女巫');
+  assert.deepEqual(g.context(nextWitch.id).potionHistory, []);
 });
 
 test('夜间无效目标与药水限制在展示和结算采用相同规则', () => {
@@ -358,6 +389,11 @@ test('首轮平票 PK、二轮平票无人出局，PK 候选人不能投票', ()
   assert.equal(g.phase, 'night');
   assert.equal(g.votes[2], null);
   assert.equal(g.votes[3], null);
+  const publicTally = g
+    .context(0)
+    .publicEvents.filter((event) => event.text.startsWith('票型'))
+    .at(-1);
+  assert.match(publicTally.text, /3→无投票资格，4→无投票资格/);
 });
 test('自投与出局玩家选票无效，全员弃票进入下一夜', () => {
   const g = fixed();

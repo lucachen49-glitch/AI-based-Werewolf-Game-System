@@ -30,6 +30,7 @@ async function waitForTurn(token, delay = turnDelay) {
 function togglePause() {
   if (!busy || speechFailure || apiWaiting || voteBatch?.errorPause) return;
   paused = !paused;
+  if (!paused) stalemateRound = null;
   if (typeof storyIntroActive === 'function' && storyIntroActive()) {
     if (paused) storyPlayer.pause();
     else {
@@ -76,6 +77,13 @@ function togglePause() {
   renderAll();
 }
 
+function endStalemate() {
+  if (stalemateRound !== game.round || !paused || game.phase !== 'night') return;
+  game.endWithoutWinner();
+  syncLogs();
+  togglePause();
+}
+
 function reset(nextSize = size) {
   if (speechFailure) {
     const pending = speechFailure;
@@ -104,6 +112,7 @@ function reset(nextSize = size) {
   releaseWait();
   busy = false;
   paused = false;
+  stalemateRound = null;
   activeSeat = null;
   actionText = '';
   runError = '';
@@ -215,7 +224,17 @@ async function runGame(token) {
           stopRecording(true);
         break;
       }
+      if (
+        game.phase === 'night' &&
+        game.noEliminationRounds >= 3 &&
+        game.noEliminationRounds % 3 === 0
+      ) {
+        stalemateRound = game.round;
+        if (!paused) togglePause();
+        renderAll();
+      }
       if (!(await waitForTurn(token)) || token !== epoch) return;
+      if (game.phase === 'ended') continue;
       if (game.phase === 'night') await runNight(token);
       else if (game.phase === 'lastWords') {
         await aiSpeeches(false, token);
@@ -231,7 +250,8 @@ async function runGame(token) {
         syncLogs();
         renderAll();
       } else if (game.phase === 'voting') await vote(token);
-      else if (game.phase === 'hunter') await hunter(token);
+      else if (game.phase === 'hunter' || game.phase === 'settlement')
+        await settleElimination(token);
       else throw Error('无法识别当前游戏阶段');
     }
   } catch (error) {
@@ -607,7 +627,7 @@ async function pauseAgentAction(id, task, error, attempt, token) {
   };
   apiWaiting = state;
   paused = true;
-  setConnection(profiles[id], 'error', state.message);
+  if (task !== 'hunter') setConnection(profiles[id], 'error', state.message);
   updatePauseState();
   renderAll();
   return awaitAPIRecovery(state, token);
@@ -746,6 +766,9 @@ function agentMessages(id, profile, task, context) {
   const schema =
     task === 'speech'
       ? (context.lastWords ? '现在是你的遗言。' : '') +
+        (role === '女巫'
+          ? '回忆自己的用药时，以 context.potionHistory 和 context.potions 为准。potionHistory 中的 round 是用药夜次，type 中 save 表示用了解药、poison 表示用了毒药，target 是用药对象的座位号。这些是你的私有信息，由你决定公开多少。'
+          : '') +
         '像真人朋友坐在桌边玩狼人杀，用自然口语和适度停顿表达怀疑、自信或紧张，避免报告腔、重复模板、括号动作或朗读标签。平常控制在 300—500 字左右，需要解释复杂推理时可以展开，最多 1400 个 Unicode 字符。只返回 {"speech":"中文发言"}'
       : task === 'night' && role === '女巫'
         ? '只返回 {"save":true或false,"poison":座位号或null}。save 表示是否对 context.tonightVictim 使用解药，合法性由 context.nightRules.canSave 决定；canSave 为 true 表示允许救当前狼刀目标，若目标是女巫本人则允许自救，但不代表必须用药。poison 若选择座位号，必须来自 context.allowedTargets；null 表示不用毒。一晚最多使用一瓶药。'
@@ -883,7 +906,7 @@ async function requestAgentDecision(id, task, extra, turnEpoch, preparation = nu
     signature = speechConfigSignature(profile);
   const attempt = startAgentAttempt(id, task, preparation);
   try {
-    setConnection(profile, 'testing');
+    if (task !== 'hunter') setConnection(profile, 'testing');
     const context = buildAgentContext(id, task, extra);
 
     if (typeof storyContext === 'function') {
@@ -912,7 +935,7 @@ async function requestAgentDecision(id, task, extra, turnEpoch, preparation = nu
     attempt.endedAt = Date.now();
     if (task === 'vote' || task === 'night')
       logAgentEvent(attempt, 'ACTION_VALIDATED', { validatedAction: action });
-    setConnection(profile, 'ok');
+    if (task !== 'hunter') setConnection(profile, 'ok');
     decisionConfigs.set(action, signature);
     decisionAttempts.set(action, attempt);
     return { action, attempt };
@@ -1102,7 +1125,7 @@ async function runNight(token = epoch) {
   }
   if (!(await waitForTurn(token)) || token !== epoch) return;
   wolfPresentation = null;
-  const result = game.resolveNight(choices, victim);
+  const result = game.resolveNight(choices, victim, { deferSettlement: game.size === 12 });
   actionText = '天亮了，正在公布昨夜结果';
   syncLogs({ ...result, narrated: true });
   addDiscussionCommentary();
@@ -1609,7 +1632,7 @@ async function vote(token = epoch) {
     if (token !== epoch) return;
   }
   if (!(await presentationWait(700, token))) return;
-  const result = game.resolveVotes(votes);
+  const result = game.resolveVotes(votes, { deferSettlement: game.size === 12 });
   syncLogs();
   renderAll();
   if (result.tie) {
@@ -1618,11 +1641,15 @@ async function vote(token = epoch) {
   }
 }
 
-async function hunter(token = epoch) {
+async function settleElimination(token = epoch) {
   const id = game.pendingHunter;
-  const result = await takeTurn(id, 'hunter', id + 1 + ' 号猎人 · 正在选择是否开枪', token);
-  if (result === null || !(await waitForTurn(token))) return;
-  game.shoot(result.target ?? null);
+  const [ready, result] = await Promise.all([
+    presentationWait(2500, token),
+    id === null ? null : takeTurn(id, 'hunter', id + 1 + ' 号猎人 · 正在选择是否开枪', token),
+  ]);
+  if (!ready || !(await waitForTurn(token, 0)) || (id !== null && result === null)) return;
+  if (id === null) game.finishSettlement();
+  else game.shoot(result.target ?? null);
   syncLogs();
   addDiscussionCommentary();
   renderAll();

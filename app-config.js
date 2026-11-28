@@ -3,6 +3,10 @@
 let agentProfileRestorePromise = null;
 let agentConfigBaseSavedAt;
 
+const sameCredentialEndpoint = (left, right, kind) =>
+  NightfallAgentRequest.credentialEndpoint(left, kind) ===
+  NightfallAgentRequest.credentialEndpoint(right, kind);
+
 function newGameId() {
   const id = globalThis.crypto?.randomUUID?.();
   return id || `game-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
@@ -92,8 +96,16 @@ function localProfileCopy(data, migrated = false) {
     const old = legacy?.[i];
     return {
       ...rest,
-      ...(old?.key && p.rememberKey !== false && !p.clearKey ? { key: old.key } : {}),
-      ...(old?.voiceKey && p.rememberVoiceKey !== false && !p.clearVoiceKey
+      ...(old?.key &&
+      p.rememberKey !== false &&
+      !p.clearKey &&
+      sameCredentialEndpoint(old.endpoint, p.endpoint, 'agent')
+        ? { key: old.key }
+        : {}),
+      ...(old?.voiceKey &&
+      p.rememberVoiceKey !== false &&
+      !p.clearVoiceKey &&
+      sameCredentialEndpoint(old.voiceEndpoint, p.voiceEndpoint, 'voice')
         ? { voiceKey: old.voiceKey }
         : {}),
     };
@@ -186,8 +198,12 @@ function adoptLocalProfiles(local, remote, revision) {
     savedAt = local.savedAt || new Date().toISOString();
   if (stored)
     merged.forEach((p, i) => {
-      const agentMatches = p.endpoint === stored[i].endpoint;
-      const voiceMatches = p.voiceEndpoint === stored[i].voiceEndpoint;
+      const agentMatches = sameCredentialEndpoint(p.endpoint, stored[i].endpoint, 'agent');
+      const voiceMatches = sameCredentialEndpoint(
+        p.voiceEndpoint,
+        stored[i].voiceEndpoint,
+        'voice',
+      );
       if (!p.key && p.rememberKey && agentMatches && stored[i].key) p.key = stored[i].key;
       if (!p.voiceKey && p.rememberVoiceKey !== false && voiceMatches && stored[i].voiceKey)
         p.voiceKey = stored[i].voiceKey;
@@ -380,8 +396,9 @@ function renderAvatarPicker() {
 }
 
 function modalProfile() {
-  return {
-    ...profiles[selectedAgent],
+  const previous = profiles[selectedAgent];
+  const next = {
+    ...previous,
     name: $('nameInput').value.trim() || NAMES[selectedAgent],
     avatar: Avatar.normalize(draftAvatar, selectedAgent),
     manorPortrait: Manor.normalize($('manorPortraitInput').value, selectedAgent),
@@ -399,6 +416,26 @@ function modalProfile() {
     connection: 'untested',
     connectionError: '',
   };
+  for (const [endpoint, key, saved, kind] of [
+    ['endpoint', 'key', 'hasKey', 'agent'],
+    ['voiceEndpoint', 'voiceKey', 'hasVoiceKey', 'voice'],
+  ]) {
+    if (sameCredentialEndpoint(previous[endpoint], next[endpoint], kind)) continue;
+    if (next[key] === previous[key]) next[key] = '';
+    next[saved] = false;
+  }
+  return next;
+}
+
+function updateCredentialInput(kind) {
+  const voice = kind === 'voice';
+  const previous = profiles[selectedAgent];
+  const endpoint = $(voice ? 'voiceEndpointInput' : 'endpointInput').value.trim();
+  const key = $(voice ? 'voiceKeyInput' : 'keyInput');
+  if (sameCredentialEndpoint(endpoint, voice ? previous.voiceEndpoint : previous.endpoint, kind))
+    return;
+  if (key.value === (voice ? previous.voiceKey : previous.key)) key.value = '';
+  key.placeholder = '地址已更换，请填写该地址的密钥';
 }
 
 function fillVoiceForm(profile, seat) {

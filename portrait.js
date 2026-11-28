@@ -11,7 +11,9 @@ function renderPortraitAPIStatus(title, detail) {
   if (!portraitMode) return;
   const preparation = preparedSpeech && !preparedSpeech.active ? preparedSpeech : null;
   const voting = voteBatchStatus();
-  const current = voting?.batch || apiWaiting || agentPending || preparation?.attempt,
+  const current = publicSettlement()
+      ? null
+      : voting?.batch || apiWaiting || agentPending || preparation?.attempt,
     waiting = !!current;
   bar.classList.toggle('waiting', waiting);
   const elapsed = current
@@ -50,14 +52,14 @@ function renderPortraitAPIStatus(title, detail) {
   const status = $('portraitAPIStatus');
   if (status.textContent !== text) status.textContent = text;
   status.setAttribute('title', text);
-  $('portraitAPIStop').hidden = voting ? !voting.pending : !agentPending;
+  $('portraitAPIStop').hidden = !waiting || (voting ? !voting.pending : !agentPending);
   $('portraitAPIStop').disabled = voting
     ? !voting.pending
     : !agentPending || agentPending.controller.signal.aborted;
   $('portraitAPIRetry').textContent = voting ? '重试失败投票' : '重试当前行动';
-  $('portraitAPIRetry').hidden = voting ? !voting.failed.length : !apiWaiting;
+  $('portraitAPIRetry').hidden = !waiting || (voting ? !voting.failed.length : !apiWaiting);
   $('portraitAPIRetry').disabled = $('portraitAPIRetry').hidden;
-  $('portraitAPIEdit').hidden = voting ? !voting.failed.length : !apiWaiting;
+  $('portraitAPIEdit').hidden = !waiting || (voting ? !voting.failed.length : !apiWaiting);
   $('portraitAPIEdit').disabled = $('portraitAPIEdit').hidden;
   $('portraitAPIDetails').disabled = !waiting;
   $('portraitAPIDialogTitle').textContent = waiting ? title : '接口连接状态';
@@ -202,6 +204,10 @@ function renderPortraitCaption() {
         : narration?.loading
           ? '声音准备中…'
           : '…');
+  } else if (stalemateRound !== null) {
+    text = '连续 ' + game.noEliminationRounds + ' 轮无人出局。请选择继续或结束本局。';
+  } else if (publicSettlement()) {
+    text = '正在结算出局情况。';
   } else if (apiWaiting) {
     label = '行动已暂停';
     text = privateNight
@@ -216,7 +222,7 @@ function renderPortraitCaption() {
         : '正在整理思路，请稍候。';
   } else if (game.phase === 'ended') {
     label = '终局';
-    text = game.winner + '阵营获胜。所有身份现已揭晓。';
+    text = (game.winner ? game.winner + '阵营获胜。' : '本局没有胜方。') + '所有身份现已揭晓。';
   } else if (game.phase === 'lobby') {
     label = '序章';
     text = '六位来客，今夜聚首。点击开始，随机发牌。';
@@ -235,8 +241,8 @@ function renderPortrait() {
     reveal = spectatorPrefs.perspective === 'god' || game.phase === 'ended',
     focus = portraitFocus();
   frame.dataset.size = String(size);
-  frame.dataset.phase = game.phase;
-  frame.dataset.winner = game.phase === 'ended' ? game.winner : '';
+  frame.dataset.phase = publicSettlement() ? 'settlement' : game.phase;
+  frame.dataset.winner = game.winner || '';
   frame.classList.toggle('portrait-paused', paused);
   $('portraitTitle').textContent =
     (typeof sessionStory !== 'undefined' && sessionStory?.title) || '血月下的长桌';
@@ -367,8 +373,13 @@ function renderPortrait() {
       discussion: ['❖', '线索藏在每句话里', '白昼议事'],
       voting: ['⚖', '每一票，皆是选择', '公开投票'],
       hunter: ['✦', '正在结算出局情况', '出局结算'],
+      settlement: ['✦', '正在结算出局情况', '出局结算'],
       lastWords: ['❖', '最后的陈述', '出局遗言'],
-      ended: [game.winner === '狼人' ? '☾' : '☀', '尘埃落定 · 身份揭晓', game.winner + '阵营胜利'],
+      ended: [
+        game.winner === '狼人' ? '☾' : '☀',
+        '尘埃落定 · 身份揭晓',
+        game.winner ? game.winner + '阵营胜利' : '本局没有胜方',
+      ],
     };
     const [symbol, kicker, title] = titles[game.phase] || titles.lobby;
     $('portraitSymbol').textContent = symbol;

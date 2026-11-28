@@ -400,9 +400,7 @@ function eliminationInfo(p) {
 function seatEffectClass(p) {
   return (
     (!p.alive ? ' eliminated-' + eliminationInfo(p).kind + ' ' : '') +
-    (game.phase === 'ended' && (p.role === '狼人') === (game.winner === '狼人')
-      ? ' winner-seat '
-      : '') +
+    (game.winner && (p.role === '狼人') === (game.winner === '狼人') ? ' winner-seat ' : '') +
     (spectatorPrefs.perspective === 'god' && nightFocus
       ? (nightFocus.actors.includes(p.id) ? ' action-actor ' : '') +
         (nightFocus.target === p.id ? ' action-target action-' + nightFocus.kind + ' ' : '')
@@ -527,8 +525,11 @@ function saveSpectatorPrefs() {
     localStorage.setItem('nightfall-spectator-v1', JSON.stringify(spectatorPrefs));
   } catch {}
 }
+function publicSettlement() {
+  return spectatorPrefs.perspective === 'public' && ['settlement', 'hunter'].includes(game.phase);
+}
 function publicNight() {
-  return spectatorPrefs.perspective === 'public' && ['night', 'hunter'].includes(game.phase);
+  return publicSettlement() || (spectatorPrefs.perspective === 'public' && game.phase === 'night');
 }
 function observerText(event) {
   return NightfallObserver.project(event, spectatorPrefs.perspective);
@@ -904,6 +905,8 @@ function setPerspective(value) {
   renderAll();
 }
 function renderSpectator() {
+  if ($('downloadGameLogBtn'))
+    $('downloadGameLogBtn').hidden = spectatorPrefs.perspective !== 'god';
   $('perspectiveInput').value = spectatorPrefs.perspective;
   $('narratorBtn').textContent = '♫ 旁白：' + (spectatorPrefs.narratorEnabled ? '开' : '关');
   $('narratorBtn').setAttribute('aria-pressed', String(spectatorPrefs.narratorEnabled));
@@ -995,26 +998,23 @@ function jumpToLatest(tab = 'speeches') {
   s.seen = recordCount(tab);
   syncRecordScroll();
 }
-function spectatorExport() {
+function spectatorExport(perspective = spectatorPrefs.perspective) {
   return {
-    perspective: spectatorPrefs.perspective,
+    perspective,
     mode: BOARDS[size].title,
     round: game.round,
-    phase:
-      game.phase === 'hunter' && spectatorPrefs.perspective === 'public'
-        ? 'settlement'
-        : game.phase,
+    phase: game.phase === 'hunter' && perspective === 'public' ? 'settlement' : game.phase,
     winner: game.winner,
-    log: game.logs
-      .filter((l) => !l.private || spectatorPrefs.perspective === 'god')
-      .map((l) => l.text),
+    log: game.logs.filter((l) => !l.private || perspective === 'god').map((l) => l.text),
     speeches: transcript.map((t) => ({ ...t, name: name(t.id) })),
-    commentary: visibleObserverEvents().map((e) => ({
-      round: e.round,
-      time: e.time,
-      text: observerText(e),
-    })),
-    ...(spectatorPrefs.perspective === 'god' || game.phase === 'ended'
+    commentary: observerEvents
+      .filter((e) => perspective === 'god' || !e.private)
+      .map((e) => ({
+        round: e.round,
+        time: e.time,
+        text: NightfallObserver.project(e, perspective),
+      })),
+    ...(perspective === 'god' || game.phase === 'ended'
       ? { roles: game.players.map((p) => ({ seat: p.id + 1, name: name(p.id), role: p.role })) }
       : {}),
   };

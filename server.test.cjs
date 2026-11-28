@@ -1893,15 +1893,22 @@ test('每局 Agent 请求与安全上下文分别保存，可独立下载', asyn
   const { base } = await fixture(t, {
     agentGameLogDirectory: path.join(directory, 'logs', 'agent-games'),
   });
-  const download = await fetch(base + '/api/game-logs/game-one');
+  const logUrl = base + '/api/game-logs/game-one';
+  const headers = { 'Sec-Fetch-Site': 'same-origin', 'X-Nightfall-Diagnostics': 'host' };
+  assert.equal((await fetch(logUrl)).status, 403);
+  assert.equal(
+    (await fetch(logUrl, { headers: { ...headers, Origin: 'https://elsewhere.invalid' } })).status,
+    403,
+  );
+  const download = await fetch(logUrl, { headers });
   assert.equal(download.status, 200);
   assert.match(download.headers.get('content-disposition'), /attachment/);
   assert.equal(await download.text(), first);
-  const head = await fetch(base + '/api/game-logs/game-one', { method: 'HEAD' });
+  const head = await fetch(logUrl, { method: 'HEAD', headers });
   assert.equal(head.status, 200);
   assert.equal(head.headers.get('content-length'), String(Buffer.byteLength(first)));
   assert.equal(await head.text(), '');
-  const missing = await fetch(base + '/api/game-logs/no-such-game');
+  const missing = await fetch(base + '/api/game-logs/no-such-game', { headers });
   assert.equal(missing.status, 404);
   assert.equal((await missing.json()).error.code, 'GAME_LOG_NOT_FOUND');
   const wrongMethod = await fetch(base + '/api/game-logs/game-one', { method: 'POST' });

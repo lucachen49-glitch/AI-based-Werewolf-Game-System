@@ -51,9 +51,13 @@
       this.phase = 'lobby';
       this.round = 0;
       this.winner = null;
+      this.noEliminationRounds = 0;
+      this.roundStartAlive = this.size;
+      this.settlementDestination = null;
       this.logs = [];
       this.knowledge = {};
       this.potions = { save: true, poison: true };
+      this.potionHistory = [];
       this.lastGuard = null;
       this.pendingHunter = null;
       this.afterHunter = null;
@@ -251,12 +255,18 @@
         witchOutcome,
       };
     }
-    resolveNight(choices = {}, fixedVictim) {
+    resolveNight(choices = {}, fixedVictim, { deferSettlement = false } = {}) {
       const plan = this.nightPlan(choices, fixedVictim),
         { victim, saved, guardTarget, poisoned, seerCheck } = plan;
       this.lastGuard = guardTarget;
-      if (saved) this.potions.save = false;
-      if (poisoned !== null) this.potions.poison = false;
+      if (saved) {
+        this.potions.save = false;
+        this.potionHistory.push({ round: this.round, type: 'save', target: victim + 1 });
+      }
+      if (poisoned !== null) {
+        this.potions.poison = false;
+        this.potionHistory.push({ round: this.round, type: 'poison', target: poisoned + 1 });
+      }
       if (seerCheck) {
         this.knowledge[seerCheck.id] ||= {};
         this.knowledge[seerCheck.id][seerCheck.target] = seerCheck.result;
@@ -285,8 +295,25 @@
         this.afterHunter = 'discussion';
         this.phase = 'hunter';
         this.event('猎人出局，可选择是否发动技能。', true);
-      } else this.#finishDeaths('discussion');
+      } else this.#settle('discussion', deferSettlement && deaths.size > 0);
       return { ...plan, deaths: [...this.nightDeaths] };
+    }
+    #settle(destination, defer) {
+      if (defer) {
+        this.phase = 'settlement';
+        this.settlementDestination = destination;
+      } else this.#finishDeaths(destination);
+    }
+    finishSettlement() {
+      if (this.phase !== 'settlement') throw Error('当前没有待处理的出局结算');
+      const destination = this.settlementDestination;
+      this.settlementDestination = null;
+      this.#finishDeaths(destination);
+    }
+    endWithoutWinner() {
+      if (this.phase !== 'night') throw Error('当前无法结束未决对局');
+      this.phase = 'ended';
+      this.event('主持人结束了僵持对局，本局没有胜方。');
     }
     #finishDeaths(destination) {
       if (this.checkWinner()) {
@@ -383,7 +410,7 @@
       const target = seatId(value);
       return target !== null && this.legalTargets(id, 'vote').includes(target + 1) ? target : null;
     }
-    resolveVotes(votes = {}) {
+    resolveVotes(votes = {}, { deferSettlement = false } = {}) {
       if (this.phase !== 'voting') throw Error('当前不是投票阶段');
       const counts = {};
       this.votes = {};
@@ -399,7 +426,10 @@
       this.event(
         '票型：' +
           this.alive()
-            .map((p) => `${p.id + 1}→${this.votes[p.id] === null ? '弃票' : this.votes[p.id] + 1}`)
+            .map((p) => {
+              const target = this.votes[p.id];
+              return `${p.id + 1}→${!this.canVote(p.id) ? '无投票资格' : target === null ? '弃票' : target + 1}`;
+            })
             .join('，'),
       );
       if (top.length > 1 && this.voteRound === 0) {
@@ -423,7 +453,7 @@
           return { eliminated: p.id, hunter: true };
         }
       } else this.event('本轮无人被放逐。');
-      this.#finishDeaths('night');
+      this.#settle('night', deferSettlement && top.length === 1);
       return { eliminated: top.length === 1 ? top[0] : null };
     }
     shoot(target) {
@@ -453,9 +483,12 @@
         this.winner ||
         this.pendingHunter !== null ||
         this.lastWordsQueue.length ||
-        !['voting', 'lastWords', 'hunter'].includes(this.phase)
+        !['voting', 'lastWords', 'hunter', 'settlement'].includes(this.phase)
       )
         throw Error('当前不能进入下一夜');
+      const living = this.alive().length;
+      this.noEliminationRounds = living === this.roundStartAlive ? this.noEliminationRounds + 1 : 0;
+      this.roundStartAlive = living;
       this.round++;
       this.phase = 'night';
       this.speeches = [];
@@ -503,6 +536,9 @@
           ),
         ),
         potions: player.role === '女巫' ? { ...this.potions } : undefined,
+        ...(player.role === '女巫'
+          ? { potionHistory: this.potionHistory.map((entry) => ({ ...entry })) }
+          : {}),
         lastGuard:
           player.role === '守卫'
             ? this.lastGuard === null

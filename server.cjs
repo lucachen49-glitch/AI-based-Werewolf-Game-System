@@ -733,12 +733,18 @@ async function handleAgentEvent(req, res, agentLogger) {
 }
 
 async function handleGameLog(req, res, gameDirectory, gameId, logger) {
-  await logger?.flush?.();
   try {
     if (!['GET', 'HEAD'].includes(req.method)) {
       res.setHeader('Allow', 'GET, HEAD');
       throw new ApiError(405, 'METHOD_NOT_ALLOWED', '此接口仅支持下载本局日志');
     }
+    if (
+      req.headers['sec-fetch-site'] !== 'same-origin' ||
+      req.headers['x-nightfall-diagnostics'] !== 'host' ||
+      !assertSameOrigin(req)
+    )
+      throw new ApiError(403, 'DIAGNOSTICS_FORBIDDEN', '请在本机游戏的上帝视角下载完整诊断。');
+    await logger?.flush?.();
     if (!/^[a-zA-Z0-9_-]{1,80}$/.test(gameId))
       throw new ApiError(400, 'INVALID_CONFIG', '对局编号无效');
     const root = path.resolve(gameDirectory),

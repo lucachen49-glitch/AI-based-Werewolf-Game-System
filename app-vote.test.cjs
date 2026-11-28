@@ -24,6 +24,60 @@ const {
   settle,
 } = require('./test-support/app-harness.cjs');
 
+test('公开结算在普通放逐与猎人弃枪时使用同一阶段，公开导出过滤私有信息', async () => {
+  for (const exiled of [6, 8]) {
+    const { context } = setup(new Map(), false);
+    prepareAuto(context, 12);
+    const read = (code) => vm.runInContext(code, context);
+    context.exiled = exiled;
+    read(`
+      game.start();
+      game.players.forEach((p,i)=>p.role=Nightfall.ROLES[12][i]);
+      game.resolveNight({},null);
+      game.openVoting();
+      game.resolveVotes(Object.fromEntries(game.alive().map(p=>[p.id,exiled])),{deferSettlement:true});
+      localDecision=()=>({target:null});
+      spectatorPrefs.perspective='public';
+      syncLogs();
+      renderAll();
+    `);
+    assert.equal(read("$('phaseCard').className"), 'phase-card settlement');
+    assert.equal(read("$('centerHint').textContent"), '正在结算出局情况');
+    assert.equal(read("$('downloadGameLogBtn').hidden"), true);
+    assert.doesNotMatch(read("JSON.stringify(spectatorExport('public'))"), /猎人可选择|roles/);
+    await read('settleElimination(epoch)');
+    assert.equal(read('game.phase'), 'lastWords');
+    assert.doesNotMatch(read("JSON.stringify(spectatorExport('public').log)"), /猎人/);
+  }
+});
+
+test('连续三轮无人出局后暂停，继续三轮后可结束为无胜方', async () => {
+  const { context } = setup(new Map(), false);
+  prepareAuto(context, 6);
+  const read = (code) => vm.runInContext(code, context);
+  read(`
+    game.start();
+    busy=true;
+    let nightRequests=0;
+    runNight=async()=>{nightRequests++;game.resolveNight({},null)};
+    aiSpeeches=async()=>{};
+    vote=async()=>game.resolveVotes({});
+  `);
+  const running = read('runGame(epoch)');
+  await until(() => read('stalemateRound===4'));
+  assert.equal(read('nightRequests'), 3);
+  assert.equal(read("$('endStalemateBtn').hidden"), false);
+  read('togglePause()');
+  await until(() => read('stalemateRound===7'));
+  assert.equal(read('nightRequests'), 6);
+  read('endStalemate()');
+  await running;
+  assert.equal(read('game.phase'), 'ended');
+  assert.equal(read('game.winner'), null);
+  assert.match(read("$('actionPanel').innerHTML"), /无胜方/);
+  assert.doesNotMatch(read('seatEffectClass(game.players[0])'), /winner-seat/);
+});
+
 test('六人和十二人投票与夜间请求使用完整公开历史并按角色隔离私有信息', () => {
   const { context } = setup(new Map(), false),
     read = (code) => vm.runInContext(code, context);

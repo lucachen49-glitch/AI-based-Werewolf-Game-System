@@ -67,6 +67,27 @@ test('录制片段按顺序写入，重复上传去重，合成失败后保留�
   );
 });
 
+test('合成恢复发现旧 WebM 少了分片时按完整分片重建', async (t) => {
+  const { request, wait, root } = await setup(t, {
+    transcode: (source, target) => fs.copyFile(source, target),
+  });
+  const { data: job } = await request('/api/recordings', 'POST', { roomSize: 6 });
+  const prefix = '/api/recordings/' + job.id;
+  assert.equal(
+    (await request(prefix + '/chunks/0', 'PUT', Buffer.from('first'))).response.status,
+    200,
+  );
+  await fs.writeFile(path.join(root, job.id, job.filename.replace(/\.mp4$/, '.webm')), 'first');
+  assert.equal(
+    (await request(prefix + '/chunks/1', 'PUT', Buffer.from('late'))).response.status,
+    200,
+  );
+  await request(prefix + '/finish', 'POST', { complete: false, expected: 2 });
+  const ready = await wait(job.id, 'ready');
+  assert.equal(ready.chunks, 2);
+  assert.equal(await fs.readFile(path.join(root, ready.filename), 'utf8'), 'firstlate');
+});
+
 test('录制达到总字节上限时返回 507 并保留已收到的片段', async (t) => {
   const { request, wait, base } = await setup(t, {
     maxTotalBytes: 3,
@@ -204,6 +225,27 @@ test('剪辑稿条目按稳定编号合并并导出 JSON、TXT、SRT、VTT', asy
   }
   assert.notEqual(recoveredState.status, 'saving');
   await new Promise((resolve) => recovered.close(resolve));
+});
+
+test('剪辑稿并发增量写入保留不同条目，重试旧版本不会覆盖新稿', async (t) => {
+  const { request } = await setup(t);
+  const { data: job } = await request('/api/recordings', 'POST', { roomSize: 6 });
+  const url = '/api/recordings/' + job.id + '/transcript';
+  const old = { id: 'a', text: '旧稿', syncRevision: 1 };
+  const results = await Promise.all([
+    request(url, 'PUT', { entries: [{ ...old, text: '新版', syncRevision: 2 }] }),
+    request(url, 'PUT', { entries: [{ id: 'b', text: '另一条对白', syncRevision: 1 }] }),
+    request(url, 'PUT', { entries: [old] }),
+  ]);
+  assert.ok(results.every(({ response }) => response.ok));
+  await request(url, 'PUT', { entries: [{ id: 'a', text: '旧格式重试' }] });
+  assert.deepEqual(
+    (await request(url)).data.entries.map(({ id, text }) => [id, text]),
+    [
+      ['a', '新版'],
+      ['b', '另一条对白'],
+    ],
+  );
 });
 
 test('服务恢复后保存未完局片段，真实转码输出竖屏且保留音轨', async (t) => {

@@ -6,6 +6,9 @@ let activeRecording = null,
 const recordingKey = 'nightfall-auto-record-v1';
 let autoRecording = false;
 const recordingTranscriptPendingKey = 'nightfall-recording-transcript-pending-v1';
+const recordingTranscriptOutbox = new Map();
+const recordingTranscriptUploads = new Map();
+const recordingTranscriptBatchSize = 32;
 function recordingTimelineNow(session = activeRecording) {
   if (!session) return 0;
   const pause = Number(session.pausedMs) || 0;
@@ -37,36 +40,68 @@ function recordingTranscriptPending() {
     return {};
   }
 }
-function recordingTranscriptSavePending(session) {
+function recordingTranscriptChanges(id) {
+  const saved = recordingTranscriptPending()[id]?.entries;
+  const entries = new Map(
+    (Array.isArray(saved) ? saved : [])
+      .filter((entry) => typeof entry?.id === 'string' && entry.id)
+      .map((entry) => [entry.id, entry]),
+  );
+  for (const [key, entry] of recordingTranscriptOutbox.get(id) || []) {
+    if ((entries.get(key)?.syncRevision || 0) <= (entry.syncRevision || 0)) entries.set(key, entry);
+  }
+  return entries;
+}
+function recordingTranscriptSavePending(id, entries) {
   try {
     const pending = recordingTranscriptPending();
-    pending[session.id] = { recordingId: session.id, entries: session.transcriptEntries };
+    if (entries.size) pending[id] = { recordingId: id, entries: [...entries.values()] };
+    else delete pending[id];
     localStorage.setItem(recordingTranscriptPendingKey, JSON.stringify(pending));
-  } catch {}
+    return true;
+  } catch {
+    return false;
+  }
 }
-function recordingTranscriptClearPending(id) {
-  try {
-    const pending = recordingTranscriptPending();
-    delete pending[id];
-    localStorage.setItem(recordingTranscriptPendingKey, JSON.stringify(pending));
-  } catch {}
-}
-function recordingTranscriptUpload(session) {
-  if (!session || !session.id || !Array.isArray(session.transcriptEntries)) return;
-  recordingTranscriptSavePending(session);
-  const snapshot = session.transcriptEntries.map((entry) => ({ ...entry }));
-  const revision = (session.transcriptRevision || 0) + 1;
-  session.transcriptRevision = revision;
-  session.transcriptQueue = (session.transcriptQueue || Promise.resolve())
-    .then(async () => {
-      await recordingRequest('/api/recordings/' + session.id + '/transcript', {
+function recordingTranscriptSync(id) {
+  const current = recordingTranscriptUploads.get(id);
+  if (current) return current;
+  const changes = recordingTranscriptChanges(id);
+  if (!changes.size) return Promise.resolve();
+  const upload = (async () => {
+    let queued = changes;
+    while (queued.size) {
+      const batch = [...queued.values()].slice(0, recordingTranscriptBatchSize);
+      await recordingRequest('/api/recordings/' + id + '/transcript', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: snapshot }),
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ entries: batch }),
       });
-      if (session.transcriptRevision === revision) recordingTranscriptClearPending(session.id);
-    })
-    .catch(() => {});
+      queued = recordingTranscriptChanges(id);
+      for (const entry of batch)
+        if (JSON.stringify(queued.get(entry.id)) === JSON.stringify(entry)) queued.delete(entry.id);
+      if (queued.size) recordingTranscriptOutbox.set(id, queued);
+      else recordingTranscriptOutbox.delete(id);
+      if (!recordingTranscriptSavePending(id, queued) && !recordingTranscriptOutbox.has(id)) break;
+    }
+  })()
+    .catch(() => {})
+    .finally(() => recordingTranscriptUploads.delete(id));
+  recordingTranscriptUploads.set(id, upload);
+  return upload;
+}
+function recordingTranscriptUpload(session, changed) {
+  const queued = recordingTranscriptChanges(session.id);
+  for (const entry of changed) {
+    entry.syncRevision = (entry.syncRevision || 0) + 1;
+    queued.set(entry.id, { ...entry });
+  }
+  if (queued.size) {
+    recordingTranscriptOutbox.set(session.id, queued);
+    recordingTranscriptSavePending(session.id, queued);
+    session.transcriptQueue = recordingTranscriptSync(session.id);
+  }
 }
 function recordingTranscriptBegin(meta = {}) {
   const session = activeRecording;
@@ -86,7 +121,14 @@ function recordingTranscriptBegin(meta = {}) {
       : typeof game !== 'undefined' && Number.isInteger(game.round)
         ? game.round
         : null,
-    phase: String(meta.phase || (typeof game !== 'undefined' && game.phase) || ''),
+    phase: String(
+      meta.phase ||
+        (typeof game !== 'undefined' &&
+          (typeof publicSettlement === 'function' && publicSettlement()
+            ? 'settlement'
+            : game.phase)) ||
+        '',
+    ),
     text,
     startedMs: recordingTimelineNow(session),
     endedMs: 0,
@@ -99,8 +141,7 @@ function recordingTranscriptBegin(meta = {}) {
     pausedMs: 0,
   };
   session.transcriptEntries.push(entry);
-  recordingTranscriptSavePending(session);
-  recordingTranscriptUpload(session);
+  recordingTranscriptUpload(session, [entry]);
   return id;
 }
 function recordingTranscriptUpdate(id, patch = {}) {
@@ -111,8 +152,7 @@ function recordingTranscriptUpdate(id, patch = {}) {
   Object.assign(entry, patch);
   if (Number.isFinite(entry.endedMs))
     entry.durationMs = Math.max(0, entry.endedMs - entry.startedMs);
-  recordingTranscriptSavePending(session);
-  recordingTranscriptUpload(session);
+  recordingTranscriptUpload(session, [entry]);
 }
 function recordingTranscriptEnd(id, status = 'played') {
   const session = activeRecording;
@@ -120,6 +160,7 @@ function recordingTranscriptEnd(id, status = 'played') {
   const entry = session.transcriptEntries.find((item) => item.id === id);
   if (!entry) return;
   const ended = recordingTimelineNow(session);
+  const changed = [];
   recordingTranscriptUpdate(id, {
     endedMs: Math.max(entry.startedMs, ended),
     durationMs: Math.max(0, ended - entry.startedMs),
@@ -135,24 +176,24 @@ function recordingTranscriptFinalize(session) {
       entry.endedMs = Math.max(entry.startedMs, ended);
       entry.durationMs = entry.endedMs - entry.startedMs;
       entry.speechStatus = 'interrupted';
+      changed.push(entry);
     }
   }
-  recordingTranscriptSavePending(session);
-  recordingTranscriptUpload(session);
+  recordingTranscriptUpload(session, changed);
 }
-async function recordingFlushPending(items = []) {
-  const pending = recordingTranscriptPending();
-  for (const [id, data] of Object.entries(pending)) {
-    if (!items.some((job) => job.id === id) || !Array.isArray(data?.entries)) continue;
-    try {
-      await recordingRequest('/api/recordings/' + id + '/transcript', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: data.entries }),
-      });
-      recordingTranscriptClearPending(id);
-    } catch {}
-  }
+function recordingTranscriptPendingIds() {
+  const ids = new Set([
+    ...Object.keys(recordingTranscriptPending()),
+    ...recordingTranscriptOutbox.keys(),
+  ]);
+  return [...ids].filter((id) => /^[a-f0-9-]{36}$/.test(id));
+}
+function recordingFlushPending() {
+  return Promise.all(recordingTranscriptPendingIds().map(recordingTranscriptSync));
+}
+function recordingTranscriptStatus(id) {
+  const count = recordingTranscriptChanges(id).size;
+  return count ? ' · ' + count + ' 条剪辑稿待同步' : '';
 }
 function recordingSupported() {
   return !!(
@@ -257,7 +298,13 @@ function recordingUpdateStatusFromList(items) {
   // Recording, authorization, pause, and configuration messages are more current
   // than the five-second list refresh and must remain visible while active.
   if (activeRecording || recordingPreparing) return;
-  recordingStatus(recordingStatusForJobs(items));
+  const pending = recordingTranscriptPendingIds().reduce(
+    (total, id) => total + recordingTranscriptChanges(id).size,
+    0,
+  );
+  recordingStatus(
+    recordingStatusForJobs(items) + (pending ? ' · ' + pending + ' 条剪辑稿待同步' : ''),
+  );
 }
 function recordingRenderList(items) {
   recordingUpdateLatestPlayback(items);
@@ -281,6 +328,7 @@ function recordingRenderList(items) {
       ' · ' +
       job.filename +
       (job.transcriptCount ? ' · ' + job.transcriptCount + ' 条对白/旁白' : '') +
+      recordingTranscriptStatus(job.id) +
       (job.reason ? ' · ' + job.reason : '');
     row.append(label);
     if (job.url) {
@@ -340,7 +388,7 @@ function recordingRenderList(items) {
 async function refreshRecordings() {
   try {
     const result = await recordingRequest('/api/recordings');
-    await recordingFlushPending(result.recordings);
+    void recordingFlushPending();
     recordingRenderList(result.recordings);
   } catch {}
 }
@@ -430,7 +478,6 @@ async function prepareRecording(token) {
       surface,
       queue: Promise.resolve(),
       transcriptQueue: Promise.resolve(),
-      transcriptRevision: 0,
       transcriptEntries: [],
       count: 0,
       started: Date.now(),
@@ -494,7 +541,8 @@ async function prepareRecording(token) {
           recordingTime(recordingTimelineNow(session)) +
           ' · 已记录 ' +
           session.transcriptEntries.length +
-          ' 条对白/旁白',
+          ' 条对白/旁白' +
+          recordingTranscriptStatus(session.id),
       );
       void recordingRequest(
         '/api/recordings/' + session.id + '/heartbeat',

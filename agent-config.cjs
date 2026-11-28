@@ -5,6 +5,7 @@ const os = require('node:os');
 const { randomUUID } = require('node:crypto');
 const { protectSecret } = require('./image-config.cjs');
 const Avatar = require('./avatar.js');
+const { credentialEndpoint } = require('./agent-request.js');
 
 const configPath = path.join(
   process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local'),
@@ -157,6 +158,11 @@ function createAgentConfigStore(file = configPath) {
             ['key', 'rememberKey', clearKey, 'keyRevision'],
             ['voiceKey', 'rememberVoiceKey', clearVoiceKey, 'voiceKeyRevision'],
           ]) {
+            const endpoint = field === 'key' ? 'endpoint' : 'voiceEndpoint';
+            const kind = field === 'key' ? 'agent' : 'voice';
+            const sameEndpoint =
+              credentialEndpoint(next[endpoint], kind) ===
+              credentialEndpoint(previous[endpoint], kind);
             if (
               (next[field] !== undefined && typeof next[field] !== 'string') ||
               (clear !== undefined && typeof clear !== 'boolean')
@@ -165,9 +171,13 @@ function createAgentConfigStore(file = configPath) {
             const value =
               clear || next[remember] === false
                 ? ''
-                : typeof next[field] === 'string' && next[field].trim()
+                : typeof next[field] === 'string' &&
+                    next[field].trim() &&
+                    (sameEndpoint || next[field].trim() !== previous[field])
                   ? next[field].trim()
-                  : previous[field] || '';
+                  : sameEndpoint
+                    ? previous[field] || ''
+                    : '';
             if (value.length > 8192 || /[\r\n]/.test(value))
               throw new AgentConfigError(400, 'INVALID_AGENT_KEY', '密钥格式不正确。');
             next[field] = value;

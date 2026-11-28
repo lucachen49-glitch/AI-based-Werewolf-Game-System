@@ -113,6 +113,9 @@
               <button class="secondary-btn pause-btn" id="pauseBtn" disabled aria-pressed="false">
                 Ⅱ 暂停
               </button>
+              <button type="button" class="secondary-btn" id="endStalemateBtn" hidden>
+                结束本局
+              </button>
               <label class="recording-toggle"
                 ><input type="checkbox" id="autoRecord" /> 自动录屏</label
               ><span id="recordingSupport" class="recording-support"></span
@@ -127,8 +130,10 @@
               <summary id="recordingStatus" role="status">录屏准备就绪 · 查看本地录像</summary>
               <div id="recordingList"></div>
               <div class="recording-item recording-agent-log">
-                <span>本局 Agent 日志</span
-                ><button type="button" id="downloadGameLogBtn">下载</button>
+                <button type="button" id="downloadPublicLogBtn">下载公开对局日志</button>
+                <button type="button" id="downloadGameLogBtn" hidden>
+                  下载完整诊断（含隐藏身份）
+                </button>
               </div>
             </details>
             <a

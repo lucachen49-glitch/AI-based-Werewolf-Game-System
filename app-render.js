@@ -174,8 +174,10 @@ function renderSidebar() {
 
 function renderStatus() {
   const remote = profiles.slice(0, size).filter((p) => p.control === 'api').length;
-  $('phaseName').textContent = phaseLabels[game.phase];
-  $('phaseCard').className = 'phase-card ' + game.phase;
+  const phase = publicSettlement() ? 'settlement' : game.phase;
+  const visiblePause = paused && !(publicSettlement() && apiWaiting?.task === 'hunter');
+  $('phaseName').textContent = phaseLabels[phase];
+  $('phaseCard').className = 'phase-card ' + phase;
   // eslint-disable-next-line no-unsanitized/property -- Values are escaped or come from local render helpers that escape dynamic content.
   $('roundValue').innerHTML = String(game.round).padStart(2, '0') + ' <small>轮</small>';
   // eslint-disable-next-line no-unsanitized/property -- Values are escaped or come from local render helpers that escape dynamic content.
@@ -186,11 +188,11 @@ function renderStatus() {
     String(remote).padStart(2, '0') + ' <small>API / ' + size + ' AI</small>';
   const stages = ['lobby', 'night', 'lastWords', 'discussion', 'voting'];
   $('progressText').textContent =
-    game.phase === 'ended' ? '已结束' : paused ? '已暂停' : '自动推进';
+    game.phase === 'ended' ? '已结束' : visiblePause ? '已暂停' : '自动推进';
   $('progressBar').style.width =
     (game.phase === 'ended'
       ? 100
-      : game.phase === 'hunter'
+      : ['hunter', 'settlement'].includes(phase)
         ? 85
         : (stages.indexOf(game.phase) + 1) * 20) + '%';
   $('startText').textContent = runError
@@ -199,7 +201,7 @@ function renderStatus() {
       ? '再来一局'
       : game.phase === 'lobby'
         ? '开始游戏'
-        : paused
+        : visiblePause
           ? '对局已暂停'
           : '自动对局中';
   $('startBtn').disabled = busy || !!connectionBatch || connectionTests > 0;
@@ -209,30 +211,38 @@ function renderStatus() {
     : '▷ 批量测试连接';
   $('testConnection').disabled = busy || !!connectionBatch || connectionTests > 0;
   $('saveAgent').disabled = !!connectionBatch || connectionTests > 0;
-  $('pauseBtn').disabled = !busy || !!speechFailure || !!apiWaiting || !!voteBatch?.errorPause;
-  $('pauseBtn').textContent = paused ? '▶ 继续对局' : 'Ⅱ 暂停';
-  $('pauseBtn').setAttribute('aria-pressed', String(paused));
+  $('pauseBtn').disabled =
+    !busy || publicSettlement() || !!speechFailure || !!apiWaiting || !!voteBatch?.errorPause;
+  $('pauseBtn').textContent = visiblePause ? '▶ 继续对局' : 'Ⅱ 暂停';
+  $('pauseBtn').setAttribute('aria-pressed', String(visiblePause));
+  $('endStalemateBtn').hidden = stalemateRound === null;
   $('gameKicker').textContent = BOARDS[size].title + ' · 全 AI 自动对局';
   $('centerHint').textContent =
     game.phase === 'lobby'
       ? '一键开始 · 随机发牌'
       : game.phase === 'ended'
-        ? game.winner + '阵营获胜'
-        : paused
-          ? '已暂停 · 等待继续'
-          : activeSeat === null
-            ? '按规则自动推进'
-            : publicNight()
-              ? game.phase === 'hunter'
-                ? '正在结算出局情况'
-                : '夜间角色正在秘密行动'
-              : activeSeat + 1 + ' 号正在' + (game.phase === 'discussion' ? '发言' : '行动');
+        ? game.winner
+          ? game.winner + '阵营获胜'
+          : '本局结束 · 无胜方'
+        : stalemateRound !== null
+          ? '连续 ' + game.noEliminationRounds + ' 轮无人出局 · 选择继续或结束'
+          : publicSettlement()
+            ? '正在结算出局情况'
+            : visiblePause
+              ? '已暂停 · 等待继续'
+              : activeSeat === null
+                ? '按规则自动推进'
+                : publicNight()
+                  ? game.phase === 'hunter'
+                    ? '正在结算出局情况'
+                    : '夜间角色正在秘密行动'
+                  : activeSeat + 1 + ' 号正在' + (game.phase === 'discussion' ? '发言' : '行动');
   $('autoState').textContent = runError
     ? '对局已停止'
     : game.phase === 'ended'
       ? '本局已结束'
       : busy
-        ? paused
+        ? visiblePause
           ? '已暂停'
           : '自动进行中'
         : '全 AI 托管';
@@ -501,12 +511,24 @@ function renderAction() {
       ' 个席位自动行动、发言、投票，直到分出胜负。未配置的席位使用本地模拟。';
   } else if (game.phase === 'ended') {
     kicker = 'THE TRUTH IS OUT';
-    title = game.winner === '好人' ? '☀ 好人找到了真相' : '☾ 狼人赢得了黑夜';
+    title = !game.winner
+      ? '本局结束 · 无胜方'
+      : game.winner === '好人'
+        ? '☀ 好人找到了真相'
+        : '☾ 狼人赢得了黑夜';
     detail = '本局共进行 ' + game.round + ' 轮，所有身份已揭晓。点击“再来一局”重新随机发牌。';
   } else if (runError) {
     kicker = 'GAME STOPPED';
     title = '对局已停止';
     detail = runError + '。请点击“重新开局”。';
+  } else if (stalemateRound !== null) {
+    kicker = 'PAUSED';
+    title = '连续 ' + game.noEliminationRounds + ' 轮无人出局';
+    detail = '已暂停后续行动。可继续对局，或结束本局并记录为无胜方。';
+  } else if (publicSettlement()) {
+    kicker = 'SETTLEMENT';
+    title = '正在结算出局情况';
+    detail = '结算完成后，主持人会公布下一阶段。';
   } else {
     kicker = paused ? 'PAUSED' : 'AUTO PLAY · ROUND ' + game.round;
     title = paused
@@ -523,7 +545,9 @@ function renderAction() {
   const preparation = preparedSpeech && !preparedSpeech.active ? preparedSpeech : null;
   const voting = voteBatchStatus();
   const secretNightBatch = voting?.batch.kind === 'night';
-  const currentAPI = voting?.batch || apiWaiting || agentPending || preparation?.attempt;
+  const currentAPI = publicSettlement()
+    ? null
+    : voting?.batch || apiWaiting || agentPending || preparation?.attempt;
   let apiTitle = title,
     apiDetail = '';
   if (voting) {
@@ -660,7 +684,8 @@ function renderAction() {
       .map(
         ([phase, label]) =>
           '<span class="' +
-          (game.phase === phase || (phase === 'voting' && game.phase === 'hunter')
+          (game.phase === phase ||
+          (phase === 'voting' && ['hunter', 'settlement'].includes(game.phase))
             ? 'active'
             : '') +
           '">' +

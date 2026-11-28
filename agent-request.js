@@ -38,6 +38,19 @@
     return url.href;
   }
 
+  function credentialEndpoint(value, kind = 'agent') {
+    try {
+      const url = new URL(value);
+      url.hash = '';
+      url.pathname = url.pathname.replace(/\/+$/, '');
+      if (kind === 'agent') return responsesEndpoint(url.href);
+      if (url.pathname === '/' || url.pathname === '/v1') url.pathname = '/v1/audio/speech';
+      return url.href;
+    } catch {
+      return String(value ?? '').trim();
+    }
+  }
+
   function responsesBody({
     model,
     messages,
@@ -427,6 +440,7 @@
     SUPPORTED_REASONING_EFFORTS,
     normalizeReasoningEffort,
     responsesEndpoint,
+    credentialEndpoint,
     responsesBody,
     responseText,
     parseActionJSON,

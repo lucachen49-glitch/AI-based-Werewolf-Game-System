@@ -440,6 +440,12 @@ test('视频配置独立加密、重启可解密、HTTP状态不含密钥；不�
   assert.equal((await restored.loadCredential()).apiKey, 'isolated-video-key-123');
   await restored.save({ provider: 'https://api-fast.hualong-ai.com/v1', apiKey: '' });
   assert.equal((await restored.loadCredential()).apiKey, 'isolated-video-key-123');
+  await assert.rejects(() => restored.save({ provider: 'https://new.example' }), {
+    code: 'VIDEO_KEY_REQUIRED',
+  });
+  assert.equal((await restored.loadCredential()).provider, 'https://api-fast.hualong-ai.com/v1');
+  await restored.save({ provider: 'https://new.example', apiKey: 'new-video-key' });
+  assert.equal((await restored.loadCredential()).apiKey, 'new-video-key');
   await assert.rejects(() => restored.save({ model: 'another-model' }));
   for (const url of [
     'http://bad.test',

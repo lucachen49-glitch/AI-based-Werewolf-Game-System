@@ -90,6 +90,7 @@ let feed = [],
   activeRequest = null,
   activeRequestControllers = new Set();
 let paused = false,
+  stalemateRound = null,
   activeSeat = null,
   actionText = '',
   autoTask = null,
@@ -115,6 +116,7 @@ const phaseLabels = {
   discussion: '白天 · 轮流发言',
   voting: '白天 · 公开投票',
   hunter: '出局结算',
+  settlement: '出局结算',
   lastWords: '出局遗言',
   ended: '终局 · 身份揭晓',
 };
@@ -191,6 +193,7 @@ document.addEventListener('keydown', (e) => {
 });
 $('startBtn').addEventListener('click', start);
 $('pauseBtn').addEventListener('click', togglePause);
+$('endStalemateBtn').addEventListener('click', endStalemate);
 $('speedInput').addEventListener('change', () => {
   turnDelay = Number($('speedInput').value);
 });
@@ -284,6 +287,8 @@ $('showKey').addEventListener('click', () => {
   $('keyInput').type = hidden ? 'text' : 'password';
   $('showKey').textContent = hidden ? '隐藏' : '显示';
 });
+$('endpointInput').addEventListener('change', () => updateCredentialInput('agent'));
+$('voiceEndpointInput').addEventListener('change', () => updateCredentialInput('voice'));
 $('copyRoomBtn').textContent = '↗ 导出对局记录';
 $('copyRoomBtn').addEventListener('click', () => {
   const data = spectatorExport();
@@ -297,10 +302,30 @@ $('copyRoomBtn').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   toast('对局记录已导出，不包含密钥');
 });
+function downloadGameFile(blob, filename) {
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+$('downloadPublicLogBtn')?.addEventListener('click', () => {
+  const data = spectatorExport('public');
+  downloadGameFile(
+    new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),
+    '夜幕之下-公开对局日志.json',
+  );
+});
 $('downloadGameLogBtn')?.addEventListener('click', async () => {
+  if (spectatorPrefs.perspective !== 'god') return;
+  const requestedGame = gameId;
   try {
-    const url = `/api/game-logs/${encodeURIComponent(gameId)}`;
-    const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    const url = `/api/game-logs/${encodeURIComponent(requestedGame)}`;
+    const response = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'X-Nightfall-Diagnostics': 'host' },
+    });
     if (!response.ok) {
       toast(
         response.status === 404
@@ -309,10 +334,9 @@ $('downloadGameLogBtn')?.addEventListener('click', async () => {
       );
       return;
     }
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `夜幕之下-${gameId}-Agent日志.jsonl`;
-    link.click();
+    const blob = await response.blob();
+    if (spectatorPrefs.perspective === 'god' && gameId === requestedGame)
+      downloadGameFile(blob, `夜幕之下-${requestedGame}-主持人诊断.jsonl`);
   } catch {
     toast('本局日志暂时不可下载，请稍后重试。');
   }

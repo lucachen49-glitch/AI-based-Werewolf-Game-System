@@ -25,7 +25,9 @@ function createCredentialResolver(store) {
     let matches = false;
     try {
       matches =
-        !!credential.endpoint && normalize(body.endpoint) === normalize(credential.endpoint);
+        !!credential.endpoint &&
+        AgentRequest.credentialEndpoint(normalize(body.endpoint), kind) ===
+          AgentRequest.credentialEndpoint(normalize(credential.endpoint), kind);
     } catch {}
     if (!matches)
       throw new AgentConfigError(409, 'PROFILE_CHANGED', '配置已修改，请先保存后重试。');
